@@ -1801,16 +1801,16 @@ async function confirmarEnvio(){
   });
   renderHist();
 
-  // 6. Mostrar resultado — rehabilitar botón y mostrar confirmación
-  const contenido=document.getElementById('paso5-content');
+  // 6. Mostrar resultado final
+  const emailStatusHTML = st ? st.innerHTML : "";
+  const contenido=document.getElementById("paso5-content");
   if(contenido){
     contenido.innerHTML=`
       <div class="ct">Envío completado</div>
-      ${st?st.outerHTML:''}
-      <div class="alert a-ok" style="margin-top:10px"><span class="ai">✓</span><div>
+      <div style="margin-bottom:10px">${emailStatusHTML}</div>
+      <div class="alert a-ok"><span class="ai">✓</span><div>
         <strong>Envío registrado — ${c.org} — Período ${c.per}</strong><br>
-        ${ahora.toLocaleString('es-AR')} · 
-        CSV${pdfBlob?' y DDJJ PDF':''} descargado(s) en tu computadora.
+        ${ahora.toLocaleString("es-AR")} · CSV${pdfBlob?" y DDJJ PDF":""} descargado(s).
       </div></div>
       <div class="btn-row">
         <button class="btn-sm btn-primary" onclick="nuevoEnvio()">Nuevo envío</button>
