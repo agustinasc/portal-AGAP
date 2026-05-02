@@ -1687,7 +1687,7 @@ function renderConfirmacion(){
       Responsable: ${c.nombreRH} · Agentes: ${agentes.length} · Errores críticos: <strong>${criticos}</strong> · Advertencias: <strong>${adv}</strong>
     </div></div>
     <div id="email-status"></div>
-    <div class="btn-row">
+    <div id="confirm-btnrow" class="btn-row">
       <button class="btn-sm" onclick="irPaso4()">← Revisar DDJJ</button>
       <button class="btn-primary" id="btn-confirmar" onclick="confirmarEnvio()">✓ Confirmar y enviar</button>
     </div>`;
@@ -1700,7 +1700,10 @@ async function confirmarEnvio(){
   const estado=criticos>0?'critico':adv>0?'advertencia':'ok';
 
   const btn=document.getElementById('btn-confirmar');
+  const btnRow=document.getElementById('confirm-btnrow');
   const st=document.getElementById('email-status');
+  // Ocultar botones inmediatamente para evitar doble click y pantalla sucia
+  if(btnRow) btnRow.style.display='none';
   if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Procesando...';}
   if(st) st.innerHTML='<div class="alert a-info"><span class="ai">ℹ</span>Generando archivos...</div>';
 
