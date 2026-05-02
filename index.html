@@ -473,6 +473,10 @@ const EMAILJS_SERVICE_ID  = 'service_18t40nc';
 const EMAILJS_TEMPLATE_ID = 'template_ajhcmhq';
 const EMAILJS_PUBLIC_KEY  = '7V-OzEjlWq6_Egg8d';
 const EMAIL_DESTINO = 'activos-agap@catamarca.gov.ar';
+// Formspree — reemplazar con tu ID real (ver instrucciones abajo)
+// Crear cuenta en formspree.io → New Form → copiar el ID del endpoint
+// Ejemplo: si el endpoint es https://formspree.io/f/xpzgkwab → ID es xpzgkwab
+const FORMSPREE_ID = 'xpqbwjnz';
 
 // ── ORGANISMOS ─────────────────────────────────────────────────────────
 const ORGS=[
@@ -1694,64 +1698,99 @@ async function confirmarEnvio(){
   const criticos=csvErrores.filter(e=>e.sev==='CRÍTICO').length;
   const adv=csvErrores.filter(e=>e.sev==='ADVERTENCIA').length;
   const estado=criticos>0?'critico':adv>0?'advertencia':'ok';
+
   const btn=document.getElementById('btn-confirmar');
-  if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Procesando...';}
   const st=document.getElementById('email-status');
+  if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Procesando...';}
   if(st) st.innerHTML='<div class="alert a-info"><span class="ai">ℹ</span>Generando archivos...</div>';
-
-  // Generar CSV
-  const csvStr=generarCSVString();
-  const csvBlob=new Blob([csvStr],{type:'text/csv;charset=utf-8;'});
-
-  // Generar PDF con manejo de error
-  let pdfBlob=null;
-  try{ pdfBlob=generarPDFBlob(); }catch(e){ console.error('PDF error:',e); }
 
   const ahora=new Date();
 
-  // Intentar email (solo si EmailJS está configurado)
-  let emailOk=false;
-  const emailConfigurado=EMAILJS_SERVICE_ID!=='TU_SERVICE_ID';
-  if(emailConfigurado){
-    try{
-      if(st) st.innerHTML='<div class="alert a-info"><span class="ai">ℹ</span>Enviando email...</div>';
-      await emailjs.send(EMAILJS_SERVICE_ID,EMAILJS_TEMPLATE_ID,{
-        to_email:EMAIL_DESTINO,
-        organismo:c.org,periodo:c.per,
-        tipo:c.tipo==='0'?'Original':'Rectificativa '+c.tipo,
-        responsable:c.nombreRH,agentes:agentes.length,
-        criticos,advertencias:adv,estado:estado.toUpperCase(),
-        fecha:ahora.toLocaleString('es-AR'),
-        mensaje:`CSB SILI 8.0 - Organismo: ${c.org} - Periodo: ${c.per} - Responsable: ${c.nombreRH} - Agentes: ${agentes.length}`,
-        csv_data:csvStr.slice(0,49000),
-      });
-      emailOk=true;
-      if(st) st.innerHTML=`<div class="alert a-ok"><span class="ai">✓</span>Email enviado a ${EMAIL_DESTINO}</div>`;
-    } catch(e){
-      console.error('Email error:',e);
-      if(st) st.innerHTML=`<div class="alert a-warn"><span class="ai">⚠</span>No se pudo enviar el email. Los archivos se descargan igual.</div>`;
-    }
-  } else {
-    if(st) st.innerHTML=`<div class="alert a-warn"><span class="ai">⚠</span>EmailJS no configurado aún. Los archivos se descargan localmente.</div>`;
-  }
+  // 1. Generar CSV
+  const csvStr=generarCSVString();
+  const csvBlob=new Blob([csvStr],{type:'text/csv;charset=utf-8;'});
+  const nombreBase=`${c.org.replace(/[^a-zA-Z0-9]/g,'_')}_${c.per}`;
 
-  // Descargar archivos — función segura
+  // 2. Generar PDF
+  let pdfBlob=null;
+  try{pdfBlob=generarPDFBlob();}catch(e){console.error('PDF:',e);}
+
+  // 3. Descargar archivos localmente (siempre)
   function descargarBlob(blob,nombre){
-    if(!blob) return;
+    if(!blob)return;
     try{
       const url=URL.createObjectURL(blob);
       const a=document.createElement('a');
       a.href=url;a.download=nombre;
       document.body.appendChild(a);a.click();
       setTimeout(()=>{URL.revokeObjectURL(url);document.body.removeChild(a);},500);
-    }catch(e){console.error('Error descargando '+nombre,e);}
+    }catch(e){console.error('Descarga:',e);}
+  }
+  descargarBlob(csvBlob,`CSB_${nombreBase}.csv`);
+  setTimeout(()=>descargarBlob(pdfBlob,`DDJJ_${nombreBase}.pdf`),800);
+
+  // 4. Enviar por Formspree con archivos adjuntos
+  let emailOk=false;
+  if(FORMSPREE_ID!=='TU_FORMSPREE_ID'){
+    try{
+      if(st) st.innerHTML='<div class="alert a-info"><span class="ai">ℹ</span>Enviando archivos por email...</div>';
+      const fd=new FormData();
+      fd.append('organismo',c.org);
+      fd.append('periodo',c.per);
+      fd.append('tipo',c.tipo==='0'?'Original':'Rectificativa '+c.tipo);
+      fd.append('responsable',c.nombreRH);
+      fd.append('agentes',String(agentes.length));
+      fd.append('criticos',String(criticos));
+      fd.append('advertencias',String(adv));
+      fd.append('estado',estado.toUpperCase());
+      fd.append('fecha',ahora.toLocaleString('es-AR'));
+      fd.append('_subject',`CSB SILI 8.0 — ${c.org} — Período ${c.per}`);
+      fd.append('_replyto',c.email||EMAIL_DESTINO);
+      // Adjuntar archivos
+      fd.append('csv',csvBlob,`CSB_${nombreBase}.csv`);
+      if(pdfBlob) fd.append('pdf',pdfBlob,`DDJJ_${nombreBase}.pdf`);
+
+      const resp=await fetch(`https://formspree.io/f/${FORMSPREE_ID}`,{
+        method:'POST',body:fd,headers:{Accept:'application/json'}
+      });
+      if(resp.ok){
+        emailOk=true;
+        if(st) st.innerHTML=`<div class="alert a-ok"><span class="ai">✓</span>Email con CSV y PDF enviado a ${EMAIL_DESTINO}</div>`;
+      } else {
+        throw new Error('HTTP '+resp.status);
+      }
+    }catch(e){
+      console.error('Formspree:',e);
+      if(st) st.innerHTML=`<div class="alert a-warn"><span class="ai">⚠</span>Email no enviado (${e.message}). Los archivos se descargaron localmente igual.</div>`;
+    }
+  } else {
+    // Fallback a EmailJS si Formspree no está configurado
+    const emailConfigurado=EMAILJS_SERVICE_ID!=='TU_SERVICE_ID';
+    if(emailConfigurado){
+      try{
+        if(st) st.innerHTML='<div class="alert a-info"><span class="ai">ℹ</span>Enviando aviso por email...</div>';
+        await emailjs.send(EMAILJS_SERVICE_ID,EMAILJS_TEMPLATE_ID,{
+          to_email:EMAIL_DESTINO,
+          organismo:c.org,periodo:c.per,
+          tipo:c.tipo==='0'?'Original':'Rectificativa '+c.tipo,
+          responsable:c.nombreRH,agentes:agentes.length,
+          criticos,advertencias:adv,estado:estado.toUpperCase(),
+          fecha:ahora.toLocaleString('es-AR'),
+          mensaje:`CSB SILI 8.0 - Organismo: ${c.org} - Periodo: ${c.per} - Responsable: ${c.nombreRH} - Agentes: ${agentes.length}`,
+          csv_data:csvStr.slice(0,49000),
+        });
+        emailOk=true;
+        if(st) st.innerHTML=`<div class="alert a-ok"><span class="ai">✓</span>Aviso enviado a ${EMAIL_DESTINO} (sin adjuntos — configurar Formspree para adjuntos)</div>`;
+      }catch(e){
+        console.error('EmailJS:',e);
+        if(st) st.innerHTML=`<div class="alert a-warn"><span class="ai">⚠</span>Email no enviado. Los archivos se descargaron localmente.</div>`;
+      }
+    } else {
+      if(st) st.innerHTML=`<div class="alert a-warn"><span class="ai">⚠</span>Email no configurado. Los archivos se descargaron localmente.</div>`;
+    }
   }
 
-  const nombreBase=`${c.org.replace(/[^a-zA-Z0-9]/g,'_')}_${c.per}`;
-  descargarBlob(csvBlob,`CSB_${nombreBase}.csv`);
-  setTimeout(()=>descargarBlob(pdfBlob,`DDJJ_${nombreBase}.pdf`),900);
-
-  // Registrar envío
+  // 5. Registrar envío
   envios.unshift({
     id:Date.now(),organismo:c.org,periodo:c.per,
     tipo:c.tipo==='0'?'Original':'Rectificativa '+c.tipo,
@@ -1762,16 +1801,21 @@ async function confirmarEnvio(){
   });
   renderHist();
 
-  // Mostrar resultado final
-  setTimeout(()=>{
-    const contenido=document.getElementById('paso5-content');
-    if(contenido) contenido.innerHTML+=`
-      <div class="alert a-ok" style="margin-top:12px"><span class="ai">✓</span><div>
-        <strong>Envío registrado — ${c.org} — ${c.per}</strong><br>
-        ${ahora.toLocaleString('es-AR')} · CSV${pdfBlob?' y DDJJ PDF':''} descargado(s).
+  // 6. Mostrar resultado — rehabilitar botón y mostrar confirmación
+  const contenido=document.getElementById('paso5-content');
+  if(contenido){
+    contenido.innerHTML=`
+      <div class="ct">Envío completado</div>
+      ${st?st.outerHTML:''}
+      <div class="alert a-ok" style="margin-top:10px"><span class="ai">✓</span><div>
+        <strong>Envío registrado — ${c.org} — Período ${c.per}</strong><br>
+        ${ahora.toLocaleString('es-AR')} · 
+        CSV${pdfBlob?' y DDJJ PDF':''} descargado(s) en tu computadora.
       </div></div>
-      <button class="btn-sm btn-primary" style="margin-top:10px" onclick="nuevoEnvio()">Nuevo envío</button>`;
-  },1800);
+      <div class="btn-row">
+        <button class="btn-sm btn-primary" onclick="nuevoEnvio()">Nuevo envío</button>
+      </div>`;
+  }
 }
 
 function nuevoEnvio(){
