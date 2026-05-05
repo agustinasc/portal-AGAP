@@ -526,7 +526,7 @@ const ERRORES_DEF={
   41:['ADVERTENCIA','trasp_osep no coincide (0.5% remuimpoos)'],42:['CRÍTICO','sexo debe ser F/M/X'],
   43:['ADVERTENCIA','premios formato inválido'],44:['ADVERTENCIA','vacaciones formato inválido'],
   45:['ADVERTENCIA','remutotal no coincide con el cálculo'],46:['ADVERTENCIA','remuimpo no coincide'],
-  47:['ADVERTENCIA','remuimpo > remutotal'],48:['CRÍTICO','código de organismo no coincide con el organismo logueado'],
+  47:['ADVERTENCIA','remuimpo > remutotal'],48:['ADVERTENCIA','código de organismo no coincide con el organismo logueado'],
   49:['ADVERTENCIA','tipoliq debe ser 1'],50:['ADVERTENCIA','apafilos != remutotal*4.5%'],
   51:['ADVERTENCIA','appatros != remutotal*9%'],52:['ADVERTENCIA','aportepatr != remuimpo*10.17%'],
   53:['ADVERTENCIA','aportejubi no coincide'],54:['ADVERTENCIA','d_svco debe ser 5000.00'],
@@ -804,42 +804,99 @@ function loadCSV(f){
   r.readAsText(f,'utf-8');
 }
 
+function parsearLineaCSV(linea){
+  // Parser robusto: maneja campos con comillas, comas dentro de comillas, \r
+  linea=linea.replace(/\r/g,'');
+  const campos=[];
+  let i=0,campo='',enComillas=false;
+  while(i<linea.length){
+    const c=linea[i];
+    if(c==='"'){
+      if(enComillas&&linea[i+1]==='"'){campo+='"';i+=2;continue;}
+      enComillas=!enComillas;
+    } else if(c===','&&!enComillas){
+      campos.push(campo.trim());campo='';
+    } else {
+      campo+=c;
+    }
+    i++;
+  }
+  campos.push(campo.trim());
+  return campos;
+}
+
+function normalizarFecha(f){
+  // Acepta DD/MM/AAAA → AAAAMMDD, o ya en AAAAMMDD, o vacío
+  if(!f||f.trim()===''||f.trim()==='/'||f.trim()==='/  /') return '';
+  f=f.trim();
+  if(/^\d{8}$/.test(f)) return f; // ya está bien
+  const m=f.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m) return `${m[3]}${m[2].padStart(2,'0')}${m[1].padStart(2,'0')}`;
+  return f;
+}
+
+function normalizarPeriodo(p){
+  // Acepta AAAAMM (correcto) o MMAAAA (invertido) → siempre devuelve AAAAMM
+  p=String(p||'').trim().replace(/"/g,'');
+  if(p.length!==6||!/^\d{6}$/.test(p)) return p;
+  const primeros4=parseInt(p.slice(0,4));
+  const ultimos4=parseInt(p.slice(2,6));
+  // Si los primeros 4 parecen año válido → AAAAMM correcto
+  if(primeros4>=2000&&primeros4<=2099) return p;
+  // Si los últimos 4 parecen año válido → está invertido MMAAAA → invertir
+  if(ultimos4>=2000&&ultimos4<=2099) return p.slice(2)+p.slice(0,2);
+  return p;
+}
+
 function importarCSV(text,nombre){
-  const lines=text.split('\n').filter(l=>l.trim());
+  const lines=text.split('\n').filter(l=>l.trim().replace(/\r/g,''));
   const orgData=orgsActivos.find(o=>o.n===currentOrg);
 
-  // ── Verificación inmediata: campo 28 (índice 27) = código de organismo
+  // ── Verificación del código de organismo (campo 28, índice 27)
+  // Solo verificar si el archivo tiene los 72 campos completos
   if(orgData&&lines.length>0){
-    const primeraLinea=lines[0].trim().split(',');
-    const codCSV=parseInt(primeraLinea[27])||0;
-    if(codCSV!==0&&codCSV!==orgData.c){
-      const orgReal=orgsActivos.find(o=>o.c===codCSV);
-      const nombreReal=orgReal?`"${orgReal.n}" (código ${codCSV})`:`código ${codCSV}`;
-      document.getElementById('csv-info').innerHTML=
-        `<div class="alert a-err" style="margin-top:4px">
-          <span class="ai">✕</span>
-          <div><strong>Archivo incorrecto.</strong><br>
-          Este CSV pertenece al organismo ${nombreReal}.<br>
-          Estás logueado como <strong>${currentOrg}</strong>.<br>
-          Cargá el archivo correcto o iniciá sesión con el organismo que corresponde.</div>
-        </div>`;
-      document.getElementById('csv-info').classList.remove('hidden');
-      csvFile=null;
-      // Resetear input file
-      const fi=document.getElementById('fi-csv');
-      if(fi){const n=fi.cloneNode(true);n.addEventListener('change',function(){if(this.files[0])loadCSV(this.files[0]);});fi.parentNode.replaceChild(n,fi);}
-      return;
+    const primeraLinea=parsearLineaCSV(lines[0]);
+    if(primeraLinea.length>=72){
+      const codCSV=parseInt(primeraLinea[27])||0;
+      if(codCSV!==0&&codCSV!==orgData.c){
+        const orgReal=orgsActivos.find(o=>o.c===codCSV);
+        const nombreReal=orgReal?`"${orgReal.n}" (código ${codCSV})`:`código ${codCSV}`;
+        document.getElementById('csv-info').innerHTML=
+          `<div class="alert a-err" style="margin-top:4px">
+            <span class="ai">✕</span>
+            <div><strong>Archivo incorrecto.</strong><br>
+            Este CSV pertenece al organismo ${nombreReal}.<br>
+            Estás logueado como <strong>${currentOrg}</strong>.<br>
+            Cargá el archivo correcto o iniciá sesión con el organismo que corresponde.</div>
+          </div>`;
+        document.getElementById('csv-info').classList.remove('hidden');
+        csvFile=null;
+        const fi=document.getElementById('fi-csv');
+        if(fi){const n=fi.cloneNode(true);n.addEventListener('change',function(){if(this.files[0])loadCSV(this.files[0]);});fi.parentNode.replaceChild(n,fi);}
+        return;
+      }
     }
+    // Si tiene menos de 72 campos, no verificamos el código — se completa automáticamente abajo
   }
 
   agentes=lines.map((l,i)=>{
-    const vals=l.trim().split(',');
+    const vals=parsearLineaCSV(l);
     const row={};
     COLS.forEach((c,ci)=>{
-      row[c]=(vals[ci]||'').trim();
+      let v=(vals[ci]||'').trim();
+      // Normalizar período MMAAAA → AAAAMM
+      if(c==='periodo') v=normalizarPeriodo(v);
+      // Normalizar fechas DD/MM/AAAA → AAAAMMDD
+      if(c==='fechaing'||c==='fechabaja'||c==='fecha_nac') v=normalizarFecha(v);
+      row[c]=v;
     });
+    // Si codigo de organismo viene vacío o 0, completar con el del organismo logueado
+    if((!row.codigo||parseInt(row.codigo)===0)&&orgData){
+      row.codigo=String(orgData.c);
+    }
     return row;
   });
+
   document.getElementById('csv-info').innerHTML=
     `<div class="file-row" style="justify-content:space-between">
       <div style="display:flex;align-items:center;gap:8px">
@@ -1307,7 +1364,7 @@ function eliminarAgente(){
 function procesarValidaciones(){
   const errores=[];
   const cuils=[],ags=[];
-  const orgData=ORGS.find(o=>o.n===currentOrg);
+  const orgData=orgsActivos.find(o=>o.n===currentOrg);
   const periodoDec=document.getElementById('d-periodo').value;
 
   agentes.forEach((a,idx)=>{
@@ -1364,11 +1421,12 @@ function procesarValidaciones(){
       if(!igual(fn(a,'aporte_caj'),r2(remutotal*CAJA_APORTE_PCT)))ag(24);
       if(!igual(fn(a,'contrib_ca'),r2(remutotal*CAJA_CONTRIB_PCT)))ag(25);
     }
-    // Validar código de organismo — siempre, es crítico
-    const codCSV=parseInt(fv(a,'codigo'))||0;
+    // Validar código de organismo
+    // El importador completa automáticamente codigo=0 con el código del organismo logueado
+    // Solo reportar error si viene explícitamente con un código diferente
     if(orgData){
-      if(codCSV===0){ag(48);} // campo vacío o cero
-      else if(codCSV!==orgData.c){ag(48);} // código diferente al organismo logueado
+      const codCSV=parseInt(fv(a,'codigo'))||0;
+      if(codCSV!==0&&codCSV!==orgData.c) ag(48);
     }
   });
 
@@ -1732,28 +1790,25 @@ async function confirmarEnvio(){
   descargarBlob(csvBlob,`CSB_${nombreBase}.csv`);
   setTimeout(()=>descargarBlob(pdfBlob,`DDJJ_${nombreBase}.pdf`),800);
 
-  // 4. Enviar email via EmailJS (ya configurado y funcionando)
+  // 4. Enviar email via EmailJS
   let emailOk=false;
   try{
     if(st) st.innerHTML='<div class="alert a-info"><span class="ai">ℹ</span>Enviando email...</div>';
     await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-      to_email:    EMAIL_DESTINO,
       organismo:   c.org,
       periodo:     c.per,
-      tipo:        c.tipo==='0'?'Original':'Rectificativa '+c.tipo,
       responsable: c.nombreRH,
       agentes:     String(agentes.length),
       criticos:    String(criticos),
       advertencias:String(adv),
       estado:      estado.toUpperCase(),
       fecha:       ahora.toLocaleString('es-AR'),
-      mensaje:     `Organismo: ${c.org}\nPeriodo: ${c.per}\nResponsable: ${c.nombreRH}\nAgentes: ${agentes.length}\nCriticos: ${criticos} | Advertencias: ${adv}`,
-      csv_data:    csvStr.slice(0, 49000),
+      mensaje:     `Organismo: ${c.org} | Periodo: ${c.per} | Responsable: ${c.nombreRH} | Agentes: ${agentes.length} | Criticos: ${criticos} | Advertencias: ${adv}`,
     });
     emailOk=true;
-    if(st) st.innerHTML=`<div class="alert a-ok"><span class="ai">✓</span>Email enviado a ${EMAIL_DESTINO}</div>`;
+    if(st) st.innerHTML=`<div class="alert a-ok"><span class="ai">✓</span>Email enviado correctamente a ${EMAIL_DESTINO}</div>`;
   } catch(e){
-    console.error('EmailJS:',e);
+    console.error('EmailJS error:',e);
     if(st) st.innerHTML=`<div class="alert a-warn"><span class="ai">⚠</span>Email no enviado (${e.message}). Los archivos se descargaron localmente.</div>`;
   }
 
