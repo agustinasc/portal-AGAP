@@ -21,7 +21,7 @@
 }
 body{font-family:var(--font);font-size:13px;color:var(--text);background:var(--bg);min-height:100vh}
 .header{background:var(--card);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100}
-.logo{width:32px;height:32px;background:var(--green);border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;flex-shrink:0}
+.logo{width:56px;height:32px;background:var(--green);border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;flex-shrink:0}
 .ht{font-size:14px;font-weight:600}.hs{font-size:11px;color:var(--text2)}
 .badge{font-size:11px;padding:2px 9px;border-radius:20px;font-weight:600;margin-left:auto}
 .badge-admin{background:var(--green-light);color:var(--green-dark)}
@@ -164,7 +164,7 @@ tr:last-child td{border-bottom:none}
 
 <div class="header">
   <div class="logo">ASCript</div>
-  <div><div class="ht">Portal de Envío CSB — SILI 8.0</div><div class="hs">AGAP — Dirección Provincial de Gestión Previsional de Activos</div></div>
+  <div><div class="ht">Portal de Ingreso — SILI 8.0</div><div class="hs">AGAP — Dirección Provincial de Gestión Previsional de Activos</div></div>
   <span class="badge hidden" id="hbadge"></span>
   <button class="btn-sm hidden" id="btn-logout" onclick="doLogout()" style="margin-left:8px">Salir</button>
 </div>
@@ -218,7 +218,7 @@ tr:last-child td{border-bottom:none}
     <div class="ct">Acceso al portal</div>
     <div class="cs">Seleccioná tu organismo e ingresá la clave asignada</div>
     <label>Organismo</label>
-    <select id="sel-org"><option value="">— Seleccioná —</option><option value="ADMIN">★ Administrador (CIA)</option></select>
+    <select id="sel-org"><option value="">— Seleccioná —</option><option value="ADMIN">★ Administrador (ASCript)</option></select>
     <label>Clave</label>
     <input type="password" id="inp-pass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
     <div id="login-err" class="alert a-err hidden" style="margin-top:8px"><span class="ai">✕</span><span id="login-err-msg">Clave incorrecta</span></div>
