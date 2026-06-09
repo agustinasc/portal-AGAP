@@ -308,13 +308,6 @@ tr:last-child td{border-bottom:none}
         <select id="d-tipo"><option value="0">0 — Original</option><option value="1">1 — Rectificativa 1</option><option value="2">2 — Rectificativa 2</option></select>
       </div>
     </div>
-    <label id="d-retiro-box" style="display:flex;align-items:center;gap:12px;margin-top:14px;padding:14px 16px;border:2px solid #C2410C;border-radius:10px;background:#FFF7ED;cursor:pointer;font-weight:600;color:#9A3412">
-      <input type="checkbox" id="d-retiro" onchange="toggleRetiro()" style="width:22px;height:22px;accent-color:#C2410C;cursor:pointer;flex:none">
-      <span style="display:flex;flex-direction:column;gap:2px">
-        <span style="font-size:15px">📋 Archivo de RETIRO VOLUNTARIO</span>
-        <span style="font-weight:400;font-size:12px;color:#9A3412">Tildar solo si este archivo es exclusivamente de agentes de retiro. La Rem. Imp. O.S. se carga manual (100%) y difiere de la Rem. Total (reducida).</span>
-      </span>
-    </label>
     <div id="paso1-err" class="alert a-err hidden" style="margin-top:10px"><span class="ai">✕</span><span id="paso1-err-msg"></span></div>
     <button class="btn-primary btn-full" onclick="irPaso2()">Continuar →</button>
   </div>
@@ -347,6 +340,7 @@ tr:last-child td{border-bottom:none}
 
     <!-- TABLA AGENTES -->
     <div class="card hidden" id="agentes-card">
+      <div id="retiro-banner" style="display:none;align-items:flex-start;gap:10px;margin-bottom:14px;padding:12px 14px;border:2px solid #C2410C;border-radius:10px;background:#FFF7ED;color:#9A3412;font-size:13px;line-height:1.45"></div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
         <div>
           <div class="ct" style="margin:0" id="agentes-count">0 agentes</div>
@@ -948,6 +942,7 @@ async function doLogin(){
     const od=ORGS.find(o=>o.n===org);
     hb.textContent=`Org. ${od?od.c:''}`;hb.className='badge badge-org';
     document.getElementById('d-organismo').value=org;
+    detectarRetiro(od?od.c:0);
     document.getElementById('screen-org').classList.remove('hidden');
     // Verificar borrador en Sheets
     setSyncIndicator('ing','⟳ Verificando...');
@@ -960,6 +955,7 @@ async function doLogin(){
 
 function doLogout(){
   currentOrg=null;agentes=[];csvErrores=[];totales={};csvFile=null;agenteIdx=null;borradorAgentes=[];borradorPeriodo='';
+  esRetiro=false;actualizarBannerRetiro(0);
   clearTimeout(syncTimeout);
   cerrarPanel();
   document.getElementById('screen-login').classList.remove('hidden');
@@ -1182,6 +1178,7 @@ function importarCSV(text,nombre){
   document.getElementById('btn-quitar-csv').addEventListener('click',function(){
     confirmarAccion('¿Quitar el archivo?','Se eliminarán todos los agentes cargados.',limpiarAgentes,'Quitar archivo');
   });
+  detectarRetiro(orgData?orgData.c:0); // re-confirmar modo retiro según organismo
   recalcularSilencioso(); // recalcular con parámetros actuales
   mostrarTablaAgentes();
   guardarEnSheets(); // guardar automáticamente al importar
@@ -1212,17 +1209,28 @@ function recalcularTodos(){
   );
 }
 
-function toggleRetiro(){
-  const chk=document.getElementById('d-retiro');
-  esRetiro = !!(chk && chk.checked);
-  const box=document.getElementById('d-retiro-box');
-  if(box) box.style.background = esRetiro ? '#FFEDD5' : '#FFF7ED';
-  if(agentes.length){
-    _doRecalcular();
-    if(typeof renderTabla==='function') renderTabla();
-    if(agenteIdx!==null && typeof abrirAgente==='function') abrirAgente(agenteIdx);
-    if(typeof guardarEnSheets==='function') guardarEnSheets();
-    mostrarToast(esRetiro?'Modo RETIRO activado — Rem. Imp. O.S. editable':'Modo retiro desactivado');
+// ── RETIRO VOLUNTARIO ──────────────────────────────────────────────────
+// Organismos de retiro: la Rem. Total es la reducida y la Rem. Imp. O.S. es el 100%.
+const RETIRO_CODES = {96:'Tribunal de Cuentas', 66:'Educación', 90:'LH', 99:'Municipios'};
+
+// Detecta retiro a partir del código de organismo (logueado o el del CSV).
+function detectarRetiro(codigoOrg){
+  const cod = parseInt(codigoOrg)||0;
+  esRetiro = cod in RETIRO_CODES;
+  actualizarBannerRetiro(cod);
+  return esRetiro;
+}
+
+function actualizarBannerRetiro(cod){
+  const b = document.getElementById('retiro-banner');
+  if(!b) return;
+  if(esRetiro){
+    b.style.display='flex';
+    b.innerHTML = `<span style="font-size:20px;flex:none">📋</span>
+      <span><strong>Retiro Voluntario detectado — ${RETIRO_CODES[cod]||''} (cód. ${cod}).</strong>
+      La <strong>Rem. Total</strong> es la reducida (lo que cobra el agente) y la <strong>Rem. Imp. O.S.</strong> es la base al 100% (editable en la solapa Seguridad Social). Obra Social y Caja Complementaria se calculan sobre la Rem. Imp. O.S.</span>`;
+  } else {
+    b.style.display='none';
   }
 }
 
@@ -2028,8 +2036,7 @@ function nuevoEnvio(){
   const bco=document.getElementById('btn-continuar-ok');if(bco)bco.classList.add('hidden');
   const baw=document.getElementById('btn-aceptar-warn');if(baw)baw.classList.add('hidden');
   const dp=document.getElementById('d-periodo');if(dp)dp.value='';
-  const dr=document.getElementById('d-retiro');if(dr)dr.checked=false;
-  esRetiro=false;const drb=document.getElementById('d-retiro-box');if(drb)drb.style.background='#FFF7ED';
+  const odR=ORGS.find(o=>o.n===currentOrg);detectarRetiro(odR?odR.c:0);
   setStep(1);
 }
 
