@@ -593,14 +593,25 @@ tr:last-child td{border-bottom:none}
 // ══════════════════════════════════════════════════════════════════════
 // SUPABASE — PERSISTENCIA DE BORRADORES
 // ══════════════════════════════════════════════════════════════════════
-const SUPABASE_URL = 'https://pllltatkepnzxcqnfbfl.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsbGx0YXRrZXBuenhjcW5mYmZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NDM1MTgsImV4cCI6MjA5NDIxOTUxOH0.eVgxnzt9xdImkNSWeEryfs1Drc19fHjEQbkTW4EFxeY';
-const SB_HEADERS = {
-  'Content-Type': 'application/json',
-  'apikey': SUPABASE_KEY,
-  'Authorization': 'Bearer ' + SUPABASE_KEY,
-  'Prefer': 'return=minimal'
-};
+const FN_URL = 'https://pllltatkepnzxcqnfbfl.supabase.co/functions/v1/portal';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsbGx0YXRrZXBuenhjcW5mYmZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NDM1MTgsImV4cCI6MjA5NDIxOTUxOH0.eVgxnzt9xdImkNSWeEryfs1Drc19fHjEQbkTW4EFxeY';
+let currentClave = null;
+
+async function fnLlamar(accion, org, clave, extra = {}) {
+  const resp = await fetch(FN_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + SUPABASE_ANON,
+      'apikey': SUPABASE_ANON
+    },
+    body: JSON.stringify({ accion, organismo: org, clave, ...extra })
+  });
+  let data;
+  try { data = await resp.json(); } catch { data = { ok: false, error: 'Respuesta inválida del servidor' }; }
+  if (!resp.ok || !data.ok) throw new Error(data.error || ('Error ' + resp.status));
+  return data;
+}
 
 let syncTimeout = null;
 let syncEstado  = 'ok';
@@ -616,29 +627,16 @@ function setSyncIndicator(estado, texto){
 }
 
 async function sbGuardar(organismo, agentes){
-  const resp = await fetch(`${SUPABASE_URL}/rest/v1/borradores`, {
-    method: 'POST',
-    headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify({ organismo, agentes, actualizado: new Date().toISOString() })
-  });
-  if(!resp.ok) throw new Error('Error guardando: ' + resp.status);
+  await fnLlamar('guardar', organismo, currentClave, { agentes });
 }
 
 async function sbCargar(organismo){
-  const resp = await fetch(
-    `${SUPABASE_URL}/rest/v1/borradores?organismo=eq.${encodeURIComponent(organismo)}&select=agentes,actualizado`,
-    { method: 'GET', headers: SB_HEADERS }
-  );
-  if(!resp.ok) throw new Error('Error cargando: ' + resp.status);
-  const data = await resp.json();
-  return data.length > 0 ? data[0] : null;
+  const data = await fnLlamar('cargar', organismo, currentClave);
+  return data.borrador || null;
 }
 
 async function sbLimpiar(organismo){
-  await fetch(
-    `${SUPABASE_URL}/rest/v1/borradores?organismo=eq.${encodeURIComponent(organismo)}`,
-    { method: 'DELETE', headers: SB_HEADERS }
-  );
+  await fnLlamar('limpiar', organismo, currentClave);
 }
 
 function guardarEnSheets(){
@@ -810,20 +808,20 @@ const ERRORES_DEF={
 /*************** BASES Y MONTOS MINIMOS  ***************/
 
 const TOL=0.02;
-// ── PARÁMETROS EDITABLES DESDE ADMIN ──────────────────────────────────
+// ── PARÁMETROS EDITABLES DESDE ADMIN PARA JUNIO──────────────────────────────────
 const TOPES = {
-  ANSES_APORTE_MIN:     14566.30,
-  ANSES_APORTE_MAX:     473398.09,
-  ANSES_BASE_MAX:       4303619.01,
-  ANSES_CONTRIB_MIN:    14239.22,
+  ANSES_APORTE_MIN:     22413.17,
+  ANSES_APORTE_MAX:     728417.64,
+  ANSES_BASE_MAX:       6621978.57,
+  ANSES_CONTRIB_MIN:    21909.89,
   PCT_CONTRIB_PATRONAL: 0.10753,
   PCT_APORTE_TRAB:      0.11,
-  OSEP_APORTE_MIN:      34828.32,
-  OSEP_CONTRIB_MIN:     69656.64,
-  OSEP_TRASP_MIN:       3869.81,
-  OSEP_BASE_MIN:        773962.74,
-  CAJA_APORTE_MIN:      10890,
-  CAJA_SUELDO_GOB:      7835220, // sueldo del gobernador — tope máx = 3%
+  OSEP_APORTE_MIN:      52242.48,
+  OSEP_CONTRIB_MIN:     104484.97,
+  OSEP_TRASP_MIN:       5804.71,
+  OSEP_BASE_MIN:        1160944.11,
+  CAJA_APORTE_MIN:      16551,
+  CAJA_SUELDO_GOB:      11752830, // sueldo del gobernador — tope máx = 3%
   D_SVCO_VAL:           5000,
   D_SS_VAL:             4400,
 };
@@ -897,13 +895,10 @@ function mostrarToast(msg='✓ Cambios guardados'){
 }
 
 function init(){
-  ORGS.forEach(o=>{claves[o.n]=pad(o.c);});
-  claves['ADMIN']='admin2024';
   orgsActivos=[...ORGS];
   actualizarSelectOrg();
   try{if(typeof emailjs!=='undefined') emailjs.init(EMAILJS_PUBLIC_KEY);}catch(e){}
 }
-
 // ── LOGIN / LOGOUT ─────────────────────────────────────────────────────
 async function doLogin(){
   const orgEl=document.getElementById('sel-org');
@@ -916,10 +911,14 @@ async function doLogin(){
   function mostrarError(msg){if(errEl)errEl.classList.remove('hidden');if(errMsg)errMsg.textContent=msg;}
   if(!org){mostrarError('Seleccioná un organismo');return;}
   if(Object.keys(claves).length===0) init();
-  const claveCorrecta=claves[org];
-  if(!claveCorrecta){mostrarError('Organismo no reconocido');return;}
-  if(pass!==claveCorrecta){mostrarError('Clave incorrecta');return;}
+  try {
+    await fnLlamar('login', org, pass);
+  } catch(err) {
+    mostrarError(err.message === 'Clave incorrecta' ? 'Clave incorrecta' : 'No se pudo verificar. Reintentá.');
+    return;
+  }
 
+currentClave = pass;
   if(errEl) errEl.classList.add('hidden');
   currentOrg=org;
 
@@ -1152,8 +1151,35 @@ function importarCSV(text,nombre){
     // Si el período del CSV difiere del declarado, se pisa automáticamente
     if(periodoFormulario && row.periodo !== periodoFormulario) row.periodo = periodoFormulario;
     if((!row.codigo||parseInt(row.codigo)===0)&&orgData) row.codigo=String(orgData.c);
+    row._sacnr='0'; // SAC No Remunerativo — siempre 0 al importar, se carga manualmente
     return row;
   });
+
+  // ── Detectar comas en apeynom y domicilio ──
+  const conComas=nuevos.map((r,i)=>{
+    const camposAfectados=[];
+    if(r.apeynom&&r.apeynom.includes(',')) camposAfectados.push(`Nombre: "${r.apeynom}"`);
+    if(r.domicilio&&r.domicilio.includes(',')) camposAfectados.push(`Domicilio: "${r.domicilio}"`);
+    return camposAfectados.length>0?{linea:i+1,cuil:r.cuil||'—',campos:camposAfectados}:null;
+  }).filter(Boolean);
+
+  const avisoComas = conComas.length>0
+    ? `<div class="alert a-err" style="margin-top:6px;font-size:11px">
+        <span class="ai">✕</span>
+        <div>
+          <strong>${conComas.length} agente(s) tienen comas (,) en Apellido/Nombre o Domicilio.</strong><br>
+          Las comas rompen el formato CSV y deben eliminarse antes de enviar.<br>
+          <div style="margin-top:6px;border:1px solid var(--red-border);border-radius:5px;max-height:120px;overflow-y:auto;background:#fff">
+            ${conComas.map(a=>`
+              <div style="padding:4px 8px;border-bottom:1px solid #fdd;font-size:10px">
+                <span style="color:var(--text2)">Línea ${a.linea} · CUIL ${a.cuil}</span><br>
+                ${a.campos.map(c=>`<span style="color:#A32D2D">⚠ ${c}</span>`).join('<br>')}
+              </div>`).join('')}
+          </div>
+          <strong style="font-size:10px">Editá cada agente desde el portal (hacé clic en la fila) y eliminá las comas.</strong>
+        </div>
+      </div>`
+    : '';
 
   // Detectar período original del CSV para mostrar aviso informativo
   const _periodoCSV=(()=>{const idx=COLS.indexOf('periodo');if(idx<0)return'';for(const l of lines){const v=normalizarPeriodo((parsearLineaCSV(l)[idx]||'').trim());if(v&&v!==periodoFormulario)return v;}return'';})();
@@ -1172,7 +1198,7 @@ function importarCSV(text,nombre){
         <div class="fs">${nuevos.length} nuevos · ${agentes.length} total acumulado${totalAntes>0?' ('+totalAntes+' previos)':''}</div></div>
       </div>
       <button id="btn-quitar-csv" class="btn-sm btn-danger" style="flex-shrink:0;padding:3px 8px">✕ Quitar</button>
-    </div>${avisoperiodo}`;
+    </div>${avisoperiodo}${avisoComas}`;
   document.getElementById('csv-info').classList.remove('hidden');
   document.getElementById('dz-csv').style.display='none';
   document.getElementById('btn-quitar-csv').addEventListener('click',function(){
@@ -1321,7 +1347,7 @@ function abrirNuevoAgente(){
   nuevo.codobra='009960';nuevo.zonageo='08';nuevo.tipoliq='1';nuevo.codorigen='0';
   nuevo.ad_caja_co='F';nuevo.tiene_deud='F';nuevo.funcionari='F';nuevo.tiene_fdo_='F';
   nuevo.sexo='M';nuevo.dias_traba='30';nuevo.d_svco='5000.00';nuevo.d_ss='4400.00';
-  nuevo.act_doc='00';nuevo.codestado='0';
+  nuevo.act_doc='00';nuevo.codestado='0';nuevo._sacnr='0';
   nuevo.periodo=document.getElementById('d-periodo').value;
   nuevo.codigo=String(ORGS.find(o=>o.n===currentOrg)?.c||'');
   agentes.push(nuevo);mostrarTablaAgentes();abrirAgente(agentes.length-1);
@@ -1399,7 +1425,7 @@ function htmlPersonales(a){
     </div>
     <div class="g3">
       ${dpSelect('p-conyuge','Cónyuge',fv(a,'conyuge'),[['0','No'],['1','Sí']])}
-      ${dpCampo('p-adherente','Adherentes OSEP',fv(a,'adherente'),'number')}
+      ${dpCampo('p-adherente','Adherente OSPLAD (siempre 0)','0','number','readonly style="background:var(--bg2);color:var(--text2);width:100%"')}
       ${dpCampo('p-asigfliar','Asig. Familiar',fv(a,'asigfliar'),'number')}
     </div>
   </div>
@@ -1447,8 +1473,10 @@ function recalcSS(){
   const gn=id=>{const el=document.getElementById(id);return el?parseFloat(el.value)||0:0;};
   const gv=id=>{const el=document.getElementById(id);return el?el.value:'';};
   const remusueldo=gn('s-remusueldo'),remusac=gn('s-remusac'),hsextras=gn('s-hsextras');
+  const sacnr=gn('s-sacnr'); // SAC No Remunerativo → suma a conceptono en el CSV
   const premios=gn('s-premios'),vacaciones=gn('s-vacaciones'),canasta=gn('s-canasta_fl'),conceptono=gn('s-conceptono');
-  const remuimpo=r2(remusueldo+remusac+hsextras);const remutotal=r2(remuimpo+conceptono+premios+vacaciones+canasta);
+  const conceptonoTotal=r2(conceptono+sacnr);
+  const remuimpo=r2(remusueldo+remusac+hsextras);const remutotal=r2(remuimpo+conceptonoTotal+premios+vacaciones+canasta);
   const a=agenteIdx!==null?agentes[agenteIdx]:null;const isDoc=a?fv(a,'act_doc')==='01':false;
   const aportejubi=isDoc?r2(remuimpo*0.18):Math.min(r2(remuimpo*0.11),ANSES_APORTE_MAX);
   const aportepatr=r2(remuimpo*PCT_CONTRIB_PATRONAL);const adCaja=gv('s-ad_caja_co');const tieneDeud=gv('s-tiene_deud');
@@ -1465,8 +1493,13 @@ function recalcSS(){
 function htmlSS(a){
   const isDoc=fv(a,'act_doc')==='01';
   const remusueldo=fn(a,'remusueldo'),remusac=fn(a,'remusac'),hsextras=fn(a,'hsextras');
-  const premios=fn(a,'premios'),vacaciones=fn(a,'vacaciones'),canasta=fn(a,'canasta_fl'),conceptono=fn(a,'conceptono');
-  const remuimpo=r2(remusueldo+remusac+hsextras);const remutotal=r2(remuimpo+conceptono+premios+vacaciones+canasta);
+  const sacnr=parseFloat(fv(a,'_sacnr'))||0; // SAC NR — campo visual interno
+  const premios=fn(a,'premios'),vacaciones=fn(a,'vacaciones'),canasta=fn(a,'canasta_fl');
+  // conceptono en el agente ya tiene CNR+SAC NR fusionados — para mostrar separamos
+  const conceptonoBruto=fn(a,'conceptono'); // total en CSV = CNR + SAC NR
+  const cnrPuro=r2(conceptonoBruto-sacnr);  // CNR puro (sin SAC NR)
+  const remuimpo=r2(remusueldo+remusac+hsextras);
+  const remutotal=r2(remuimpo+conceptonoBruto+premios+vacaciones+canasta);
   const aportejubi=isDoc?r2(remuimpo*0.18):Math.min(r2(remuimpo*0.11),ANSES_APORTE_MAX);
   const aportepatr=r2(remuimpo*PCT_CONTRIB_PATRONAL);const adCaja=fv(a,'ad_caja_co');const tieneDeud=fv(a,'tiene_deud');
   const aporte_caj=adCaja==='T'?r2(remutotal*CAJA_APORTE_PCT):0;
@@ -1477,7 +1510,8 @@ function htmlSS(a){
     <div class="field-group-title">Remuneraciones base</div>
     <div class="g3">
       ${dpCampo('s-remusueldo','Rem. Sueldo *',fv(a,'remusueldo'),'number',oninput)}
-      ${dpCampo('s-remusac','Rem. SAC *',fv(a,'remusac'),'number',oninput)}
+      ${dpCampo('s-remusac','SAC Remunerativo *',fv(a,'remusac'),'number',oninput)}
+      ${dpCampo('s-sacnr','SAC No Remunerativo',fv(a,'_sacnr')||'0','number',oninput)}
       ${dpCampo('s-hsextras','Horas Extras $',fv(a,'hsextras'),'number',oninput)}
     </div>
     <div class="g3">
@@ -1485,7 +1519,7 @@ function htmlSS(a){
       ${dpCampo('s-vacaciones','Vacaciones *',fv(a,'vacaciones'),'number',oninput)}
       ${dpCampo('s-canasta_fl','Canasta Familiar *',fv(a,'canasta_fl'),'number',oninput)}
     </div>
-    ${dpCampo('s-conceptono','Conceptos No Remunerativos *',fv(a,'conceptono'),'number',oninput)}
+    ${dpCampo('s-conceptono','Conceptos No Remunerativos (CNR) *',String(cnrPuro>=0?cnrPuro:0),'number',oninput)}
   </div>
   ${esRetiro?`<div class="field-group" style="border:2px solid #C2410C;border-radius:10px;background:#FFF7ED">
     <div class="field-group-title" style="color:#9A3412">📋 Retiro Voluntario — Rem. Imp. O.S. (100%)</div>
@@ -1583,9 +1617,33 @@ function guardarAgente(){
 
   // ── Personales (si los campos están en el DOM) ──
   if(document.getElementById('p-cuil')){
-    a.cuil=gv('p-cuil');a.nroagente=gv('p-nroagente');a.apeynom=gv('p-apeynom');
-    a.domicilio=gv('p-domicilio');a.fecha_nac=gv('p-fecha_nac');a.sexo=gv('p-sexo');
-    a.canthijo=gv('p-canthijo');a.conyuge=gv('p-conyuge');a.adherente=gv('p-adherente');
+    const apeynom=gv('p-apeynom');
+    const domicilio=gv('p-domicilio');
+    // Validar comas
+    const errComas=[];
+    if(apeynom.includes(',')) errComas.push('Apellido y Nombre');
+    if(domicilio.includes(',')) errComas.push('Domicilio');
+    if(errComas.length>0){
+      // Mostrar error en el footer del panel sin cerrar
+      const footer=document.querySelector('.detail-footer');
+      const errId='err-comas-panel';
+      let errEl=document.getElementById(errId);
+      if(!errEl){
+        errEl=document.createElement('div');
+        errEl.id=errId;
+        errEl.className='alert a-err';
+        errEl.style.cssText='margin:8px 18px 0;font-size:11px;flex-basis:100%;order:-1';
+        footer.prepend(errEl);
+      }
+      errEl.innerHTML=`<span class="ai">✕</span><div><strong>No se puede guardar.</strong> Eliminá las comas (,) del campo: <strong>${errComas.join(' y ')}</strong>. Las comas no están permitidas.</div>`;
+      return; // No guardar
+    }
+    // Limpiar error si ya no hay comas
+    const errExist=document.getElementById('err-comas-panel');
+    if(errExist) errExist.remove();
+    a.cuil=gv('p-cuil');a.nroagente=gv('p-nroagente');a.apeynom=apeynom;
+    a.domicilio=domicilio;a.fecha_nac=gv('p-fecha_nac');a.sexo=gv('p-sexo');
+    a.canthijo=gv('p-canthijo');a.conyuge=gv('p-conyuge');a.adherente='0';
     a.asigfliar=gv('p-asigfliar');a.fechaing=gv('p-fechaing');a.fechabaja=gv('p-fechabaja');
   }
 
@@ -1602,22 +1660,25 @@ function guardarAgente(){
   // ── Seguridad Social ──
   if(document.getElementById('s-remusueldo')){
     const remusueldo=gn('s-remusueldo'),remusac=gn('s-remusac'),hsextras=gn('s-hsextras');
+    const sacnr=gn('s-sacnr'); // SAC No Remunerativo — se suma a conceptono en el CSV
     const premios=gn('s-premios'),vacaciones=gn('s-vacaciones'),canasta=gn('s-canasta_fl'),conceptono=gn('s-conceptono');
-    const remuimpo=r2(remusueldo+remusac+hsextras);const remutotal=r2(remuimpo+conceptono+premios+vacaciones+canasta);
+    const conceptonoTotal=r2(conceptono+sacnr); // lo que va al CSV
+    const remuimpo=r2(remusueldo+remusac+hsextras);
+    const remutotal=r2(remuimpo+conceptonoTotal+premios+vacaciones+canasta);
     const isDoc=a.act_doc==='01';
     const adCaja=gv('s-ad_caja_co');const tieneDeud=gv('s-tiene_deud');
-    // En retiro: remuimpoos (100%) lo tipea el usuario; sino = remutotal.
     const remuimpoos=esRetiro?(gn('s-remuimpoos')||remutotal):remutotal;
     const baseOS=remuimpoos;
     const aporte_caj=adCaja==='T'?r2(baseOS*CAJA_APORTE_PCT):0;
     const contrib_ca=adCaja==='T'?r2(baseOS*CAJA_CONTRIB_PCT):0;
-    // Conservar aportejubi y aportepatr del CSV — no recalcular para no pisar valores liquidados
     const aportejubi=fn(a,'aportejubi')||0;
     const aportepatr=fn(a,'aportepatr')||0;
     Object.assign(a,{
       remusueldo:String(remusueldo),remusac:String(remusac),hsextras:String(hsextras),
       premios:String(premios),vacaciones:String(vacaciones),canasta_fl:String(canasta),
-      conceptono:String(conceptono),remuimpo:String(remuimpo),remutotal:String(remutotal),
+      conceptono:String(conceptonoTotal), // CSV: CNR + SAC NR fusionados
+      _sacnr:String(sacnr),              // campo visual interno — NO va al CSV
+      remuimpo:String(remuimpo),remutotal:String(remutotal),
       remuimpoos:String(remuimpoos),remuimpoto:String(remuimpo),
       aportejubi:String(aportejubi),aportepatr:String(aportepatr),
       ad_caja_co:adCaja,aporte_caj:String(aporte_caj),contrib_ca:String(contrib_ca),
