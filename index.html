@@ -1444,7 +1444,7 @@ function htmlLaborales(a){
     <div class="field-group-title">Datos laborales</div>
     <div class="g3">
       ${dpSelect('l-zonageo','Zona Geográfica',fv(a,'zonageo'),[['08','08'],['09','09']])}
-      ${dpCampo('l-actividad','Actividad* (obligatorio)',fv(a,'actividad'))}
+      ${dpSelect('l-actividad','Actividad *',fv(a,'actividad'),ACT_PERM.map(c=>[c,c]))}
       ${dpCampo('l-porcreduc','Porc. Reducción',fv(a,'porcreduc'),'number')}
     </div>
     <div class="g2">${dpCampo('l-saf','SAF',fv(a,'saf'))}${dpCampo('l-ubicacion','Ubicación Presupuestaria* (obligatorio)',fv(a,'ubicacion'))}</div>
@@ -1633,6 +1633,32 @@ function guardarAgente(){
     }
     errEl.innerHTML=`<span class="ai">✕</span><div><strong>Para continuar debés completar:</strong> ${faltantes.join(' y ')} <span style="color:var(--text2)">(solapa Datos Laborales)</span>.</div>`;
     return; // corta el guardado
+  }
+
+  // ── Validar formato de fechas AAAAMMDD ──
+  const errFechas=[];
+  const chkFecha=(id,label,obligatoria)=>{
+    if(!document.getElementById(id)) return;
+    const val=gv(id);
+    if(!val){ if(obligatoria) errFechas.push(`${label} (obligatoria)`); return; }
+    if(!fechaOk(val)) errFechas.push(`${label} debe ser AAAAMMDD (8 dígitos)`);
+  };
+  chkFecha('p-fecha_nac','Fecha de nacimiento',true);
+  chkFecha('p-fechaing','Fecha de ingreso al cargo',true);
+  chkFecha('p-fechabaja','Fecha de baja',false); // vacío permitido
+  if(errFechas.length>0){
+    if(dpTabActual!=='personales') dpTab('personales');
+    const footer=document.querySelector('.detail-footer');
+    let errEl=document.getElementById('err-comas-panel');
+    if(!errEl){
+      errEl=document.createElement('div');
+      errEl.id='err-comas-panel';
+      errEl.className='alert a-err';
+      errEl.style.cssText='margin:8px 18px 0;font-size:11px;flex-basis:100%;order:-1';
+      footer.prepend(errEl);
+    }
+    errEl.innerHTML=`<span class="ai">✕</span><div><strong>Revisá las fechas:</strong> ${errFechas.join(' · ')}.</div>`;
+    return; // no guarda
   }
 
   // ── Personales (si los campos están en el DOM) ──
