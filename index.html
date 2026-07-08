@@ -1444,10 +1444,10 @@ function htmlLaborales(a){
     <div class="field-group-title">Datos laborales</div>
     <div class="g3">
       ${dpSelect('l-zonageo','Zona Geográfica',fv(a,'zonageo'),[['08','08'],['09','09']])}
-      ${dpCampo('l-actividad','Actividad',fv(a,'actividad'))}
+      ${dpCampo('l-actividad','Actividad* (obligatorio)',fv(a,'actividad'))}
       ${dpCampo('l-porcreduc','Porc. Reducción',fv(a,'porcreduc'),'number')}
     </div>
-    <div class="g2">${dpCampo('l-saf','SAF',fv(a,'saf'))}${dpCampo('l-ubicacion','Ubicación Presupuestaria',fv(a,'ubicacion'))}</div>
+    <div class="g2">${dpCampo('l-saf','SAF',fv(a,'saf'))}${dpCampo('l-ubicacion','Ubicación Presupuestaria* (obligatorio)',fv(a,'ubicacion'))}</div>
     <div class="g3">
       ${dpSelect('l-tipoliq','Tipo Liquidación',fv(a,'tipoliq'),[['1','1 — Autoliquidación'],['2','2 — Reemplaza LH']])}
       ${dpSelect('l-funcionari','Funcionario',fv(a,'funcionari'),[['F','No'],['T','Sí']])}
@@ -1615,6 +1615,26 @@ function guardarAgente(){
   const gv=id=>{const el=document.getElementById(id);return el?el.value.trim():'';};
   const gn=id=>parseFloat(gv(id))||0;
 
+  // ── Obligatorios: no deja guardar si falta actividad o ubicación ──
+  const faltantes=[];
+  if(document.getElementById('l-actividad') && !gv('l-actividad')) faltantes.push('Actividad');
+  if(document.getElementById('l-ubicacion') && !gv('l-ubicacion')) faltantes.push('Ubicación Presupuestaria');
+  if(faltantes.length>0){
+    // Si el campo que falta está en otra solapa, la abrimos para que lo vea
+    if(dpTabActual!=='laborales') dpTab('laborales');
+    const footer=document.querySelector('.detail-footer');
+    let errEl=document.getElementById('err-comas-panel');
+    if(!errEl){
+      errEl=document.createElement('div');
+      errEl.id='err-comas-panel';
+      errEl.className='alert a-err';
+      errEl.style.cssText='margin:8px 18px 0;font-size:11px;flex-basis:100%;order:-1';
+      footer.prepend(errEl);
+    }
+    errEl.innerHTML=`<span class="ai">✕</span><div><strong>Para continuar debés completar:</strong> ${faltantes.join(' y ')} <span style="color:var(--text2)">(solapa Datos Laborales)</span>.</div>`;
+    return; // corta el guardado
+  }
+
   // ── Personales (si los campos están en el DOM) ──
   if(document.getElementById('p-cuil')){
     const apeynom=gv('p-apeynom');
@@ -1740,7 +1760,9 @@ function eliminarAgente(){
 function procesarValidaciones(){
   const errores=[];const cuils=[],ags=[];
   const orgData=orgsActivos.find(o=>o.n===currentOrg);
-  const periodoDec=document.getElementById('d-periodo').value;
+  const periodoDec=document.getElementById('d-periodo').value.trim();
+  // Completar período vacío con el declarado (evita error 13 por campos en blanco)
+  agentes.forEach(a=>{ if(!(a.periodo||'').trim()) a.periodo = periodoDec; });
   agentes.forEach((a,idx)=>{
     const nl=idx+1;const cuil=fv(a,'cuil'),agente=fv(a,'nroagente'),apeynom=fv(a,'apeynom');
     const esMag=fv(a,'act_doc')==='01';
