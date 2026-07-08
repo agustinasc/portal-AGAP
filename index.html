@@ -1347,7 +1347,7 @@ function abrirNuevoAgente(){
   nuevo.codobra='009960';nuevo.zonageo='08';nuevo.tipoliq='1';nuevo.codorigen='0';
   nuevo.ad_caja_co='F';nuevo.tiene_deud='F';nuevo.funcionari='F';nuevo.tiene_fdo_='F';
   nuevo.sexo='M';nuevo.dias_traba='30';nuevo.d_svco='5000.00';nuevo.d_ss='4400.00';
-  nuevo.act_doc='00';nuevo.codestado='0';nuevo._sacnr='0';
+  nuevo.act_doc='00';nuevo.codestado='0';nuevo._sacnr='0';nuevo.porceadi='6';
   nuevo.periodo=document.getElementById('d-periodo').value;
   nuevo.codigo=String(ORGS.find(o=>o.n===currentOrg)?.c||'');
   agentes.push(nuevo);mostrarTablaAgentes();abrirAgente(agentes.length-1);
@@ -2024,7 +2024,7 @@ function generarCSVString(){
   const c=campos();const orgData=ORGS.find(o=>o.n===currentOrg);
   // Relleno que usa el SILI para campos vacíos (para que el TXT no quede con blancos)
   const DEFAULTS_CSV = {
-    canthijo:'0', rebpromo:'0', porcreduc:'0', porceadi:'0', cant_hsext:'0', por_retiro:'0', saf:'0',
+    canthijo:'0', rebpromo:'0', porcreduc:'0', porceadi:'6', cant_hsext:'0', por_retiro:'0', saf:'0',
     aportvolun:'0.00', exessocial:'0.00', asigfliar:'0.00', exeosocial:'0.00', impoadicos:'0.00',
     coseguro:'0.00', d_svca:'0.00', d_sc:'0.00', remu_doc:'0.00', ap_dcto788:'0.00',
     aporte_dif:'0.00', rem_retiro:'0.00'
