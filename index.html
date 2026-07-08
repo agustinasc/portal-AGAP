@@ -2022,9 +2022,20 @@ function descargarPDF(){
 
 function generarCSVString(){
   const c=campos();const orgData=ORGS.find(o=>o.n===currentOrg);
+  // Relleno que usa el SILI para campos vacíos (para que el TXT no quede con blancos)
+  const DEFAULTS_CSV = {
+    canthijo:'0', rebpromo:'0', porcreduc:'0', porceadi:'0', cant_hsext:'0', por_retiro:'0', saf:'0',
+    aportvolun:'0.00', exessocial:'0.00', asigfliar:'0.00', exeosocial:'0.00', impoadicos:'0.00',
+    coseguro:'0.00', d_svca:'0.00', d_sc:'0.00', remu_doc:'0.00', ap_dcto788:'0.00',
+    aporte_dif:'0.00', rem_retiro:'0.00'
+  };
   return agentes.map(a=>{
     const row={...a};row.periodo=c.per;row.declara=c.tipo;row.codigo=String(orgData?.c||'');
-    return COLS.map(col=>(row[col]||'')).join(',');
+    return COLS.map(col=>{
+      let v = (row[col]!=null ? String(row[col]).trim() : '');
+      if(v==='' && DEFAULTS_CSV[col]!==undefined) v = DEFAULTS_CSV[col];
+      return v;
+    }).join(',');
   }).join('\n');
 }
 
