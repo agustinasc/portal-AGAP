@@ -589,6 +589,8 @@ tr:last-child td{border-bottom:none}
   </div>
 </div><!-- /main -->
 
+
+
 <script>
 // ══════════════════════════════════════════════════════════════════════
 // SUPABASE — PERSISTENCIA DE BORRADORES
@@ -796,7 +798,7 @@ const ERRORES_DEF={
   78:['ADVERTENCIA','contrib_ca > máximo Caja (3% sueldo gobernador)'],
   53:['ADVERTENCIA','aportejubi no coincide'],54:['ADVERTENCIA','d_svco debe ser 5000.00'],
   55:['ADVERTENCIA','d_ss debe ser 4400.00'],60:['ADVERTENCIA','fechaing vacía'],
-  61:['ADVERTENCIA','fechaing formato inválido'],62:['ADVERTENCIA','fecha_nac formato inválido'],
+  61:['CRÍTICO','fechaing formato inválido'],62:['CRÍTICO','fecha_nac formato inválido'],
   63:['ADVERTENCIA','agente menor de 18 años al ingreso'],64:['ADVERTENCIA','fechaing anterior a fecha_nac'],
   65:['ADVERTENCIA','apafilos < mínimo OSEP'],66:['ADVERTENCIA','appatros < mínimo OSEP'],
   67:['ADVERTENCIA','trasp_osep < mínimo OSEP'],68:['ADVERTENCIA','apo_vol no coincide'],
@@ -892,6 +894,31 @@ function mostrarToast(msg='✓ Cambios guardados'){
   const t=document.getElementById('save-toast');
   t.textContent=msg;t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),2000);
+}
+
+<!-- MODAL -->
+function mostrarAvisoEnviar(){
+  // Reutiliza el overlay de confirmación con un cartel grande y llamativo
+  const ov=document.createElement('div');
+  ov.className='confirm-overlay';
+  ov.id='aviso-enviar-overlay';
+  ov.innerHTML=`
+    <div class="confirm-box" style="max-width:440px;text-align:center;padding:32px 28px;border-top:6px solid var(--green)">
+      <div style="font-size:46px;line-height:1;margin-bottom:14px">📧</div>
+      <div style="font-size:20px;font-weight:800;color:var(--green-dark);margin-bottom:10px">
+        ¡Archivos generados!
+      </div>
+      <div style="font-size:15px;font-weight:600;color:var(--text);line-height:1.5;margin-bottom:6px">
+        Por favor, enviá los archivos generados
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:22px">
+        Adjuntá el CSV y la DDJJ (PDF) al correo:<br>
+        <strong style="color:var(--text)">${EMAIL_DESTINO}</strong>
+      </div>
+      <button class="btn-primary" style="padding:10px 28px;font-size:14px"
+        onclick="document.getElementById('aviso-enviar-overlay').remove()">Entendido</button>
+    </div>`;
+  document.body.appendChild(ov);
 }
 
 function init(){
@@ -2142,6 +2169,8 @@ async function confirmarEnvio(){
         <button class="btn-sm btn-primary" onclick="nuevoEnvio()">Nuevo envío</button>
       </div>`;
   }
+  mostrarAvisoEnviar();
+
 }
 
 function nuevoEnvio(){
