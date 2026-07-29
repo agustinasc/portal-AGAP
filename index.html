@@ -791,7 +791,7 @@ const ERRORES_DEF={
   45:['ADVERTENCIA','remutotal no coincide con el cálculo'],46:['ADVERTENCIA','remuimpo no coincide'],
   47:['ADVERTENCIA','remuimpo > remutotal'],48:['ADVERTENCIA','código de organismo no coincide con el organismo logueado'],
   49:['ADVERTENCIA','tipoliq debe ser 1'],50:['ADVERTENCIA','apafilos != remutotal*4.5%'],
-  51:['ADVERTENCIA','appatros != remutotal*9%'],52:['ADVERTENCIA','aportepatr != remuimpo*10.753%'],
+  51:['ADVERTENCIA','appatros != remutotal*9%'],52:['ADVERTENCIA','aportepatr != remuimpo*10.753% (12.753% si actividad 1506)'],
   75:['ADVERTENCIA','aportepatr < mínimo ANSES (contribución patronal)'],
   76:['ADVERTENCIA','aporte_caj < mínimo Caja Complementaria'],
   77:['ADVERTENCIA','aporte_caj > máximo Caja (3% sueldo gobernador)'],
@@ -850,6 +850,11 @@ function sincronizarTopes(){
 }
 sincronizarTopes();
 const ACT_PERM=["1106","2106","1206","2206","1306","2306","1406","2406","9999","1506","2506","0106","0206","0306","0406","01"];
+// ── Insalubridad: actividades con contribución patronal adicional del 2% ──
+const ACT_INSALUBRE=["1506"];
+const PCT_INSALUBRE=0.02;
+function esInsalubreAct(act){return ACT_INSALUBRE.includes((act||'').toString().trim());}
+function pctContribDe(act){return PCT_CONTRIB_PATRONAL+(esInsalubreAct(act)?PCT_INSALUBRE:0);}
 const ACT_DOC=["75","76","77","78","79","00","01"];
 const CODOBRA_OK=["009960","001102"];
 
@@ -1305,7 +1310,7 @@ function _doRecalcular(){
     const aportejubi = isDoc
       ? r2(remuimpo * 0.18)
       : Math.min(r2(remuimpo * TOPES.PCT_APORTE_TRAB), ANSES_APORTE_MAX);
-    const aportepatr = r2(remuimpo * TOPES.PCT_CONTRIB_PATRONAL);
+    const aportepatr = r2(remuimpo * pctContribDe(fv(a,'actividad')));
     const esOSEP   = codobra === '009960';
     const esOSPLAD = codobra === '001102';
     let pctAporte = 0.045, pctContrib = 0.09;
@@ -1352,7 +1357,7 @@ function renderTabla(){
           <td style="font-family:var(--mono);font-size:11px">${fv(a,'cuil')||'<span style="color:var(--red)">Sin CUIL</span>'}</td>
           <td style="font-weight:600">${fv(a,'apeynom')||'<span style="color:var(--text3);font-weight:400">Sin nombre</span>'}</td>
           <td>${fv(a,'nroagente')}</td>
-          <td style="font-size:11px">${fv(a,'actividad')}</td>
+          <td style="font-size:11px">${fv(a,'actividad')}${esInsalubreAct(fv(a,'actividad'))?' <span class="pill" style="background:#FEF2F2;color:#B91C1C;border:1px solid #FECACA;font-size:9px">Insalubre</span>':''}</td>
           <td style="font-family:var(--mono);font-size:11px">${fmt(fn(a,'remutotal'))}</td>
           <td><span class="pill p-ok" style="${osStyle(a)}">${fv(a,'codobra')||'—'}</span></td>
           <td style="text-align:center">${fv(a,'dias_traba')}</td>
@@ -1509,14 +1514,19 @@ function recalcSS(){
   const remuimpo=r2(remusueldo+remusac+hsextras);const remutotal=r2(remuimpo+conceptonoTotal+premios+vacaciones+canasta);
   const a=agenteIdx!==null?agentes[agenteIdx]:null;const isDoc=a?fv(a,'act_doc')==='01':false;
   const aportejubi=isDoc?r2(remuimpo*0.18):Math.min(r2(remuimpo*0.11),ANSES_APORTE_MAX);
-  const aportepatr=r2(remuimpo*PCT_CONTRIB_PATRONAL);const adCaja=gv('s-ad_caja_co');const tieneDeud=gv('s-tiene_deud');
+  const actAg=(document.getElementById('l-actividad')?gv('l-actividad'):(a?fv(a,'actividad'):''));
+  const insal=esInsalubreAct(actAg);
+  const contribBasica=r2(remuimpo*PCT_CONTRIB_PATRONAL);
+  const contribInsal=insal?r2(remuimpo*PCT_INSALUBRE):0;
+  const aportepatr=r2(contribBasica+contribInsal);const adCaja=gv('s-ad_caja_co');const tieneDeud=gv('s-tiene_deud');
   const baseOS=esRetiro?(gn('s-remuimpoos')||remutotal):remutotal;
   const aporte_caj=adCaja==='T'?r2(baseOS*CAJA_APORTE_PCT):0;
   const contrib_ca=adCaja==='T'?r2(baseOS*CAJA_CONTRIB_PCT):0;
   const deudaCalc=tieneDeud==='T'?r2(baseOS*CAJA_DEUDA_PCT):0;
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=fmt(v);};
   set('calc-remuimpo',remuimpo);set('calc-remutotal',remutotal);set('calc-aportejubi',aportejubi);
-  set('calc-aportepatr',aportepatr);set('calc-aporte_caj',aporte_caj);set('calc-contrib_ca',contrib_ca);set('calc-deuda',deudaCalc);
+  set('calc-aportepatr',aportepatr);set('calc-contrib-basica',contribBasica);set('calc-contrib-insal',contribInsal);
+  set('calc-aporte_caj',aporte_caj);set('calc-contrib_ca',contrib_ca);set('calc-deuda',deudaCalc);
   const lbl=document.getElementById('calc-jub-lbl');if(lbl)lbl.textContent=`Aporte Jubilación (${isDoc?'18%':'11%'})`;
 }
 
@@ -1531,7 +1541,10 @@ function htmlSS(a){
   const remuimpo=r2(remusueldo+remusac+hsextras);
   const remutotal=r2(remuimpo+conceptonoBruto+premios+vacaciones+canasta);
   const aportejubi=isDoc?r2(remuimpo*0.18):Math.min(r2(remuimpo*0.11),ANSES_APORTE_MAX);
-  const aportepatr=r2(remuimpo*PCT_CONTRIB_PATRONAL);const adCaja=fv(a,'ad_caja_co');const tieneDeud=fv(a,'tiene_deud');
+  const insal=esInsalubreAct(fv(a,'actividad'));
+  const contribBasica=r2(remuimpo*PCT_CONTRIB_PATRONAL);
+  const contribInsal=insal?r2(remuimpo*PCT_INSALUBRE):0;
+  const aportepatr=r2(contribBasica+contribInsal);const adCaja=fv(a,'ad_caja_co');const tieneDeud=fv(a,'tiene_deud');
   const aporte_caj=adCaja==='T'?r2(remutotal*CAJA_APORTE_PCT):0;
   const contrib_ca=adCaja==='T'?r2(remutotal*CAJA_CONTRIB_PCT):0;const deudaCalc=tieneDeud==='T'?r2(remutotal*CAJA_DEUDA_PCT):0;
   const oninput='oninput="recalcSS()"';const onchange='onchange="recalcSS()"';
@@ -1562,10 +1575,17 @@ function htmlSS(a){
       <div><label>Rem. Imponible</label><div class="ro-val" id="calc-remuimpo">${fmt(remuimpo)}</div></div>
       <div><label>Rem. Total</label><div class="ro-val" id="calc-remutotal">${fmt(remutotal)}</div></div>
       <div><label id="calc-jub-lbl">Aporte Jubilación (${isDoc?'18%':'11%'})</label><div class="ro-val" id="calc-aportejubi">${fmt(aportejubi)}</div></div>
-      <div><label>Contribución Patr. (10.753%)</label><div class="ro-val" id="calc-aportepatr">${fmt(aportepatr)}</div></div>
+      <div><label>Contribución Patr. ${insal?'<span class="calc-badge" style="background:#B91C1C;color:#fff">insalubre 12.753%</span>':'(10.753%)'}</label><div class="ro-val" id="calc-aportepatr">${fmt(aportepatr)}</div></div>
       ${isDoc?dpCampo('s-ap_dcto788','Aporte Dcto. 788',fv(a,'ap_dcto788'),'number'):''}
       ${isDoc?dpCampo('s-aporte_dif','Aporte Diferencial Doc.',fv(a,'aporte_dif'),'number'):''}
     </div>
+    ${insal?`<div class="g2" style="margin-top:10px;padding:10px;background:#FEF2F2;border:1px solid #FECACA;border-radius:6px">
+      <div><label>· Contribución básica (10.753%)</label><div class="ro-val" id="calc-contrib-basica">${fmt(contribBasica)}</div></div>
+      <div><label>· Adicional insalubridad (2%)</label><div class="ro-val" id="calc-contrib-insal">${fmt(contribInsal)}</div></div>
+      <div style="grid-column:1/-1;font-size:11px;color:#991B1B;margin-top:4px;line-height:1.5">
+        Actividad 1506 — personal insalubre. En el CSV los dos importes van <strong>sumados en aportepatr</strong>, porque el layout de 72 columnas no tiene campo propio para el adicional.
+      </div>
+    </div>`:''}
   </div>
   <div class="field-group">
     <div class="field-group-title">Caja Complementaria 82 Móvil <span class="calc-badge">se actualiza al escribir</span></div>
@@ -1891,7 +1911,7 @@ function procesarValidaciones(){
     const aportejubi=fn(a,'aportejubi');
     if(esMag){if(!igual(aportejubi,r2(remuimpo*0.18)))ag(53);}
     else{if(!igual(aportejubi,Math.min(r2(remuimpo*0.11),ANSES_APORTE_MAX)))ag(53);if(dias===30&&aportejubi<ANSES_APORTE_MIN-TOL)ag(18);if(aportejubi>ANSES_APORTE_MAX+TOL)ag(71);}
-    if(!igual(fn(a,'aportepatr'),r2(remuimpo*PCT_CONTRIB_PATRONAL)))ag(52);
+    if(!igual(fn(a,'aportepatr'),r2(remuimpo*pctContribDe(fv(a,'actividad')))))ag(52);
     if(dias===30&&fn(a,'aportepatr')<ANSES_CONTRIB_MIN-TOL)ag(75);
     if(fn(a,'apafilos')<OSEP_APORTE_MIN-TOL)ag(65);if(fn(a,'appatros')<OSEP_CONTRIB_MIN-TOL)ag(66);
     if(fv(a,'codobra')==='009960'){const t=fn(a,'trasp_osep');if(t===0)ag(74);else if(t<OSEP_TRASP_MIN-TOL)ag(67);}
@@ -1955,7 +1975,8 @@ function calcularTotales(){
     remusueldo:0,remusac:0,hsextras:0,asigfliar:0,exessocial:0,exeosocial:0,
     aportejubi:0,aportepatr:0,apafilos:0,appatros:0,trasp_osep:0,
     aporte_caj:0,contrib_ca:0,deuda_caja:0,agentes_caja:0,agentes_deuda:0,
-    d_svco:0,d_ss:0,d_svca:0,d_sc:0,ap_dcto788:0,aporte_dif:0,remu_doc:0,funcionarios:0};
+    d_svco:0,d_ss:0,d_svca:0,d_sc:0,ap_dcto788:0,aporte_dif:0,remu_doc:0,funcionarios:0,
+    contrib_insal:0,agentes_insal:0};
   agentes.forEach(a=>{
     totales.cargos++;
     ['remutotal','remuimpo','remuimpoos','conceptono','canasta_fl','premios','vacaciones',
@@ -1966,6 +1987,7 @@ function calcularTotales(){
     if(fv(a,'ad_caja_co')==='T')totales.agentes_caja++;
     if(fv(a,'tiene_deud')==='T'){totales.agentes_deuda++;totales.deuda_caja+=fn(a,'deuda_caja');}
     if(fv(a,'funcionari')==='T')totales.funcionarios++;
+    if(esInsalubreAct(fv(a,'actividad'))){totales.agentes_insal++;totales.contrib_insal+=r2(fn(a,'remuimpo')*PCT_INSALUBRE);}
   });
   totales.canasta=agentes.reduce((s,a)=>s+fn(a,'canasta_fl'),0);
 }
@@ -2024,6 +2046,7 @@ function generarDDJJ(){
       <div class="ddjj-sec"><div class="ddjj-sec-t">Seguridad Social</div>
         ${dr('Aporte S.S.',fmt(T.aportejubi))}${dr('Contribución Patr.',fmt(T.aportepatr))}
         ${dr('Aporte Dcto. 788',fmt(T.ap_dcto788))}${dr('Aporte Dif. Doc.',fmt(T.aporte_dif))}
+        ${T.agentes_insal>0?dr(`Adic. Insalubridad 2% (${T.agentes_insal} ag.)`,fmt(T.contrib_insal)):''}
       </div>
       <div class="ddjj-sec"><div class="ddjj-sec-t">Obra Social</div>
         ${dr('Aporte O.S.',fmt(T.apafilos))}${dr('Contribución Patr.',fmt(T.appatros))}
@@ -2089,6 +2112,7 @@ function generarPDFBlob(){
     sec('SEGURIDAD SOCIAL');
     r2l('Aporte S.S.:',fmt(T.aportejubi),'Contribucion Patr.:',fmt(T.aportepatr));
     r2l('Aporte Dcto. 788:',fmt(T.ap_dcto788),'Aporte Diferencial Doc.:',fmt(T.aporte_dif));
+    if(T.agentes_insal>0) r1l(`Adicional Insalubridad 2% (${T.agentes_insal} agentes, incluido en Contribucion Patr.):`,fmt(T.contrib_insal));
     sec('OBRA SOCIAL');
     r2l('Aporte O.S.:',fmt(T.apafilos),'Contribucion Patr.:',fmt(T.appatros));
     r1l('Fondo Trasplante:',fmt(T.trasp_osep));
