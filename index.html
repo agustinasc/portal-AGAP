@@ -120,7 +120,7 @@ tr:last-child td{border-bottom:none}
 
 /* PANEL LATERAL */
 .detail-panel{
-  position:fixed;top:0;right:0;width:700px;height:100vh;background:#fff;
+  position:fixed;top:0;right:0;width:90%;max-width:1500px;height:100vh;background:#fff;
   border-left:1px solid var(--border);z-index:200;display:flex;flex-direction:column;
   box-shadow:-4px 0 24px rgba(0,0,0,.12);
   transform:translateX(100%);transition:transform .25s ease}
@@ -132,6 +132,12 @@ tr:last-child td{border-bottom:none}
 .detail-footer{padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:#fff;flex-shrink:0}
 
 .field-group{margin-bottom:16px}
+.g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px}
+@media(max-width:1000px){.g4{grid-template-columns:1fr 1fr}}
+.dp-seccion{display:flex;align-items:center;gap:10px;margin:26px 0 14px;padding-top:16px;border-top:2px solid var(--border)}
+.dp-seccion:first-child{margin-top:4px;padding-top:0;border-top:none}
+.dp-seccion h3{margin:0;font-size:14px;font-weight:700;color:var(--text)}
+.dp-seccion .dp-sec-hint{font-size:11px;color:var(--text2)}
 .field-group-title{font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)}
 .calc-badge{font-size:9px;padding:1px 5px;border-radius:8px;background:var(--green-light);color:var(--green-dark);margin-left:5px;font-weight:600}
 
@@ -223,12 +229,6 @@ tr:last-child td{border-bottom:none}
       <div class="fs" id="dp-cuil">—</div>
     </div>
     <span class="pill p-ok" id="dp-badge">Activo</span>
-  </div>
-  <div class="subtabs" id="dp-subtabs">
-    <button class="subtab active" onclick="dpTab('personales')">Datos Personales</button>
-    <button class="subtab" onclick="dpTab('laborales')">Datos Laborales</button>
-    <button class="subtab" onclick="dpTab('ss')">Seguridad Social</button>
-    <button class="subtab" onclick="dpTab('os')">Obra Social</button>
   </div>
   <div class="detail-body" id="dp-body" style="padding-top:12px"></div>
   <div class="detail-footer">
@@ -812,18 +812,18 @@ const ERRORES_DEF={
 const TOL=0.02;
 // ── PARÁMETROS EDITABLES DESDE ADMIN PARA JUNIO──────────────────────────────────
 const TOPES = {
-  ANSES_APORTE_MIN:     22413.17,
-  ANSES_APORTE_MAX:     728417.64,
-  ANSES_BASE_MAX:       6621978.57,
-  ANSES_CONTRIB_MIN:    21909.89,
+  ANSES_APORTE_MIN:     15263.37,
+  ANSES_APORTE_MAX:     496052.42,
+  ANSES_BASE_MAX:       4509567.41,
+  ANSES_CONTRIB_MIN:    14920.64,
   PCT_CONTRIB_PATRONAL: 0.10753,
   PCT_APORTE_TRAB:      0.11,
-  OSEP_APORTE_MIN:      52242.48,
-  OSEP_CONTRIB_MIN:     104484.97,
-  OSEP_TRASP_MIN:       5804.71,
-  OSEP_BASE_MIN:        1160944.11,
-  CAJA_APORTE_MIN:      16551,
-  CAJA_SUELDO_GOB:      11752830, // sueldo del gobernador — tope máx = 3%
+  OSEP_APORTE_MIN:      36944.59,
+  OSEP_CONTRIB_MIN:     73889.19,
+  OSEP_TRASP_MIN:       4104.95,
+  OSEP_BASE_MIN:        820990.98,
+  CAJA_APORTE_MIN:      11172,
+  CAJA_SUELDO_GOB:      7835220, // sueldo del gobernador — tope máx = 3%
   D_SVCO_VAL:           5000,
   D_SS_VAL:             4400,
 };
@@ -1389,7 +1389,6 @@ function abrirAgente(idx){
   const tieneBaja=!!fv(a,'fechabaja');
   document.getElementById('dp-badge').textContent=tieneBaja?'Baja':'Activo';
   document.getElementById('dp-badge').className='pill '+(tieneBaja?'p-err':'p-ok');
-  document.querySelectorAll('.subtab').forEach((el,i)=>el.classList.toggle('active',i===0));
   renderDpTab();
   document.getElementById('detail-panel').classList.add('open');
   document.getElementById('overlay').classList.add('show');
@@ -1400,29 +1399,33 @@ function cerrarPanel(){
   document.getElementById('overlay').classList.remove('show');agenteIdx=null;
 }
 function dpTab(tab){
+  // Ya no hay solapas: desplaza la vista única hasta la sección pedida
   dpTabActual=tab;
-  const tabs=['personales','laborales','ss','os'];
-  document.querySelectorAll('.subtab').forEach((el,i)=>el.classList.toggle('active',tabs[i]===tab));
-  mostrarTabDom(tab);
+  const el=document.getElementById('tab-'+tab);
+  if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
 }
 function renderDpTab(){
   if(agenteIdx===null)return;
   const a=agentes[agenteIdx];
   const b=document.getElementById('dp-body');
   // Renderizar TODAS las pestañas en el DOM (ocultas) para poder leer todos los campos al guardar
+  const sec=(id,titulo,hint,contenido)=>
+    `<div id="tab-${id}"><div class="dp-seccion"><h3>${titulo}</h3>`+
+    (hint?`<span class="dp-sec-hint">${hint}</span>`:'')+
+    `</div>${contenido}</div>`;
+  // Vista única: todas las secciones visibles, una debajo de la otra
   b.innerHTML=
-    `<div id="tab-personales" style="${dpTabActual==='personales'?'':'display:none'}">${htmlPersonales(a)}</div>`+
-    `<div id="tab-laborales"  style="${dpTabActual==='laborales' ?'':'display:none'}">${htmlLaborales(a)}</div>`+
-    `<div id="tab-ss"         style="${dpTabActual==='ss'        ?'':'display:none'}">${htmlSS(a)}</div>`+
-    `<div id="tab-os"         style="${dpTabActual==='os'        ?'':'display:none'}">${htmlOS(a)}</div>`;
+    sec('personales','Datos Personales','',htmlPersonales(a))+
+    sec('laborales','Datos Laborales','',htmlLaborales(a))+
+    sec('ss','Seguridad Social','',htmlSS(a))+
+    sec('os','Obra Social','',htmlOS(a))+
+    sec('otros','Otros campos del CSV','campos que antes no se mostraban',htmlOtros(a));
   b.scrollTop=0;
 }
 
 function mostrarTabDom(tab){
-  ['personales','laborales','ss','os'].forEach(t=>{
-    const el=document.getElementById('tab-'+t);
-    if(el) el.style.display=(t===tab?'':'none');
-  });
+  // Vista única: no se oculta nada, solo se desplaza. Se conserva por compatibilidad.
+  dpTab(tab);
 }
 
 function dpCampo(id,lbl,val,type='text',extra=''){
@@ -1636,6 +1639,35 @@ function htmlOS(a){
 }
 
 // ── GUARDAR AGENTE (panel lateral) ─────────────────────────────────────
+// ── OTROS CAMPOS DEL CSV ───────────────────────────────────────────────
+// Campos que existen en el layout pero no se mostraban en ninguna sección.
+function htmlOtros(a){
+  const ro=(lbl,val)=>`<div><label>${lbl} <span class="calc-badge">auto</span></label><div class="ro-val">${(val||'—')}</div></div>`;
+  return`
+  <div class="field-group">
+    <div class="g4">
+      ${dpCampo('x-porceadi','% Adicional (porceadi)',fv(a,'porceadi'),'number')}
+      ${dpCampo('x-aportvolun','Aporte voluntario',fv(a,'aportvolun'),'number')}
+      ${dpCampo('x-exessocial','Excedente Seg. Social',fv(a,'exessocial'),'number')}
+      ${dpCampo('x-exeosocial','Excedente Obra Social',fv(a,'exeosocial'),'number')}
+      ${dpCampo('x-impoadicos','Importe adicional O.S.',fv(a,'impoadicos'),'number')}
+      ${dpCampo('x-codorigen','Código origen (debe ser 0)',fv(a,'codorigen'))}
+      ${dpCampo('x-coseguro','Co-seguro',fv(a,'coseguro'),'number')}
+      ${dpSelect('x-tiene_fdo_','¿Tiene fondo?',fv(a,'tiene_fdo_')||'F',[['F','F — No'],['T','T — Sí']])}
+      ${dpCampo('x-por_retiro','% Retiro',fv(a,'por_retiro'),'number')}
+      ${dpCampo('x-rem_retiro','Remuneración retiro',fv(a,'rem_retiro'),'number')}
+      ${ro('Código organismo',fv(a,'codigo'))}
+      ${ro('Tipo declaración',fv(a,'declara'))}
+      ${ro('Período',fv(a,'periodo'))}
+      ${ro('Remun. imponible total',fv(a,'remuimpoto'))}
+    </div>
+    <div style="font-size:11px;color:var(--text2);margin-top:10px;line-height:1.5">
+      Los cuatro campos marcados <span class="calc-badge">auto</span> los completa el portal al generar el CSV
+      (los tres primeros desde el Paso 1, y la remuneración imponible total se iguala a la imponible).
+    </div>
+  </div>`;
+}
+
 function guardarAgente(){
   if(agenteIdx===null)return;
   const a=agentes[agenteIdx];
@@ -1779,6 +1811,16 @@ function guardarAgente(){
       a.trasp_osep=String(trasp_osep);
       a.cos_pro=gv('o-cos_pro');a.cos_alt=gv('o-cos_alt');a.cos_int=gv('o-cos_int');
     } else {a.apo_vol='0';a.tras_vol='0';a.trasp_osep='0';a.cos_pro='0';a.cos_alt='0';a.cos_int='0';}
+  }
+
+  // ── Otros campos del CSV ──
+  if(document.getElementById('x-codorigen')){
+    ['porceadi','aportvolun','exessocial','exeosocial','impoadicos',
+     'codorigen','coseguro','por_retiro','rem_retiro','tiene_fdo_'].forEach(c=>{
+      const el=document.getElementById('x-'+c);
+      if(el) a[c]=gv('x-'+c);
+    });
+    if(a.tiene_fdo_!=='T'&&a.tiene_fdo_!=='F') a.tiene_fdo_='F';
   }
 
   document.getElementById('dp-nombre').textContent=fv(a,'apeynom')||'Nuevo agente';
