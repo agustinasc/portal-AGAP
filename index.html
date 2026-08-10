@@ -278,7 +278,7 @@ tr:last-child td{border-bottom:none}
     <div class="step-sep">›</div>
     <div class="step" id="step-4"><div class="sn">4</div>DDJJ</div>
     <div class="step-sep">›</div>
-    <div class="step" id="step-5"><div class="sn">5</div>Confirmar envío</div>
+    <div class="step" id="step-5"><div class="sn">5</div>Confirmar descarga</div>
   </div>
 
   <!-- PASO 1 -->
@@ -400,7 +400,7 @@ tr:last-child td{border-bottom:none}
     </div>
     <div class="btn-row" style="margin-top:14px">
       <button class="btn-sm" onclick="irPaso2show()">← Editar agentes</button>
-      <button class="btn-warn hidden" id="btn-aceptar-warn" onclick="irPaso4()">Enviar con advertencias →</button>
+      <button class="btn-warn hidden" id="btn-aceptar-warn" onclick="irPaso4()">Descargar con advertencias →</button>
       <button class="btn-primary hidden" id="btn-continuar-ok" onclick="irPaso4()">Continuar →</button>
     </div>
   </div>
@@ -408,12 +408,12 @@ tr:last-child td{border-bottom:none}
   <!-- PASO 4 -->
   <div id="paso-4" class="card hidden">
     <div class="ct">DDJJ — Nota de presentación</div>
-    <div class="cs">Revisá los totales calculados del CSV. Si todo es correcto, confirmá el envío.</div>
+    <div class="cs">Revisá los totales calculados del CSV. Si todo es correcto, confirmá la descarga.</div>
     <div class="ddjj-preview" id="ddjj-preview"></div>
     <div class="btn-row">
       <button class="btn-sm" onclick="irPaso3show()">← Volver</button>
       <button class="btn-sm btn-info" onclick="descargarPDF()">⬇ Descargar PDF</button>
-      <button class="btn-primary" onclick="irPaso5()">Confirmar y enviar →</button>
+      <button class="btn-primary" onclick="irPaso5()">Confirmar y descargar →</button>
     </div>
   </div>
 
@@ -424,9 +424,9 @@ tr:last-child td{border-bottom:none}
 
   <!-- HISTORIAL -->
   <div class="card" style="margin-top:4px">
-    <div class="ct">Historial de envíos</div>
-    <div class="cs">Envíos de esta sesión</div>
-    <div id="hist-table"><p style="font-size:11px;color:var(--text2)">Sin envíos aún.</p></div>
+    <div class="ct">Historial de descargas</div>
+    <div class="cs">Descargas de esta sesión</div>
+    <div id="hist-table"><p style="font-size:11px;color:var(--text2)">Sin descargas aún.</p></div>
   </div>
 </div>
 
@@ -434,23 +434,23 @@ tr:last-child td{border-bottom:none}
 <div id="screen-admin" class="hidden">
   <div class="tabs">
     <button class="tab active" onclick="adminTab('resumen')">Resumen</button>
-    <button class="tab" onclick="adminTab('envios')">Todos los envíos</button>
+    <button class="tab" onclick="adminTab('envios')">Todas las descargas</button>
     <button class="tab" onclick="adminTab('organismos')">Organismos</button>
     <button class="tab" onclick="adminTab('parametros')">⚙ Parámetros</button>
   </div>
   <div id="at-resumen">
     <div class="metric-grid">
-      <div class="metric"><div class="mv" id="m-tot">0</div><div class="ml">Envíos totales</div></div>
+      <div class="metric"><div class="mv" id="m-tot">0</div><div class="ml">Descargas totales</div></div>
       <div class="metric"><div class="mv" id="m-ok" style="color:var(--green-dark)">0</div><div class="ml">Sin errores</div></div>
       <div class="metric"><div class="mv" id="m-warn" style="color:var(--amber)">0</div><div class="ml">Con advertencias</div></div>
       <div class="metric"><div class="mv" id="m-crit" style="color:var(--red)">0</div><div class="ml">Con críticos</div></div>
     </div>
-    <div class="card"><div class="ct" style="margin-bottom:10px">Últimos envíos</div><div id="a-recent"><p style="font-size:11px;color:var(--text2)">Sin envíos.</p></div></div>
+    <div class="card"><div class="ct" style="margin-bottom:10px">Últimas descargas</div><div id="a-recent"><p style="font-size:11px;color:var(--text2)">Sin descargas.</p></div></div>
   </div>
   <div id="at-envios" class="hidden">
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div class="ct" style="margin:0">Todos los envíos</div>
+        <div class="ct" style="margin:0">Todas las descargas</div>
         <div style="display:flex;gap:6px">
           <input type="text" id="filtro-org" placeholder="Filtrar organismo..." style="width:160px" oninput="renderAdminAll()">
           <button class="btn-sm btn-primary" onclick="exportarRegistroCSV()">Exportar registro</button>
@@ -573,7 +573,7 @@ tr:last-child td{border-bottom:none}
       </div>
     </div>
     <div class="rs" style="color:var(--amber);background:var(--amber-light);border:1px solid var(--amber-border);border-radius:var(--radius);padding:8px 11px;margin-bottom:16px">
-      ⚠ Se copiará la estructura de agentes. Revisá los datos antes de enviar, ya que algunos valores (remuneraciones, días, etc.) pueden haber cambiado entre períodos.
+      ⚠ Se copiará la estructura de agentes. Revisá los datos antes de descargar, ya que algunos valores (remuneraciones, días, etc.) pueden haber cambiado entre períodos.
     </div>
     <div class="confirm-btns">
       <button class="btn-sm btn-danger" id="reutilizar-no">No, descartar borrador</button>
@@ -1200,7 +1200,7 @@ function importarCSV(text,nombre){
         <span class="ai">✕</span>
         <div>
           <strong>${conComas.length} agente(s) tienen comas (,) en Apellido/Nombre o Domicilio.</strong><br>
-          Las comas rompen el formato CSV y deben eliminarse antes de enviar.<br>
+          Las comas rompen el formato CSV y deben eliminarse antes de descargar.<br>
           <div style="margin-top:6px;border:1px solid var(--red-border);border-radius:5px;max-height:120px;overflow-y:auto;background:#fff">
             ${conComas.map(a=>`
               <div style="padding:4px 8px;border-bottom:1px solid #fdd;font-size:10px">
@@ -2173,8 +2173,8 @@ function generarCSVString(){
 function renderConfirmacion(){
   const c=campos();const criticos=csvErrores.filter(e=>e.sev==='CRÍTICO').length;const adv=csvErrores.filter(e=>e.sev==='ADVERTENCIA').length;
   document.getElementById('paso5-content').innerHTML=`
-    <div class="ct">Confirmar envío</div>
-    <div class="cs">Al confirmar se descargará el CSV y la DDJJ en PDF, y se enviará un email a la CIA. El borrador guardado se eliminará.</div>
+    <div class="ct">Confirmar descarga</div>
+    <div class="cs">Al confirmar se descargará el CSV y la DDJJ en PDF. El borrador guardado se eliminará.</div>
     <div class="alert a-info"><span class="ai">ℹ</span><div>
       <strong>${c.org}</strong> — Período <strong>${c.per}</strong> — Tipo: ${c.tipo==='0'?'Original':'Rectificativa '+c.tipo}<br>
       Responsable: ${c.nombreRH} · Agentes: ${agentes.length} · Errores críticos: <strong>${criticos}</strong> · Advertencias: <strong>${adv}</strong>
@@ -2182,7 +2182,7 @@ function renderConfirmacion(){
     <div id="email-status"></div>
     <div id="confirm-btnrow" class="btn-row">
       <button class="btn-sm" onclick="irPaso4()">← Revisar DDJJ</button>
-      <button class="btn-primary" id="btn-confirmar" onclick="confirmarEnvio()">✓ Confirmar y enviar</button>
+      <button class="btn-primary" id="btn-confirmar" onclick="confirmarEnvio()">✓ Confirmar y descargar</button>
     </div>`;
 }
 
@@ -2208,7 +2208,7 @@ async function confirmarEnvio(){
 
   let emailOk=false;
   try{
-    if(st)st.innerHTML='<div class="alert a-info"><span class="ai">ℹ</span>Enviando email...</div>';
+    if(st)st.innerHTML='<div class="alert a-info"><span class="ai">ℹ</span>Finalizando...</div>';
     await emailjs.send(EMAILJS_SERVICE_ID,EMAILJS_TEMPLATE_ID,{
       organismo:c.org,periodo:c.per,responsable:c.nombreRH,agentes:String(agentes.length),
       criticos:String(criticos),advertencias:String(adv),estado:estado.toUpperCase(),
@@ -2216,9 +2216,9 @@ async function confirmarEnvio(){
       mensaje:`Organismo: ${c.org} | Periodo: ${c.per} | Responsable: ${c.nombreRH} | Agentes: ${agentes.length}`,
     });
     emailOk=true;
-    if(st)st.innerHTML=`<div class="alert a-ok"><span class="ai">✓</span>Archivos generados correctamente. Por favor, envielos a ${EMAIL_DESTINO}</div>`;
+    if(st)st.innerHTML=`<div class="alert a-ok"><span class="ai">✓</span>Archivos generados correctamente.</div>`;
   }catch(e){
-    if(st)st.innerHTML=`<div class="alert a-warn"><span class="ai">⚠</span>Email no enviado. Los archivos se descargaron localmente.</div>`;
+    if(st)st.innerHTML=`<div class="alert a-ok"><span class="ai">✓</span>Archivos descargados localmente.</div>`;
   }
 
   // Limpiar borrador en Sheets al confirmar envío
@@ -2236,14 +2236,14 @@ async function confirmarEnvio(){
   const contenido=document.getElementById('paso5-content');
   if(contenido){
     contenido.innerHTML=`
-      <div class="ct">Envío completado</div>
+      <div class="ct">Descarga completada</div>
       <div style="margin-bottom:10px">${emailStatusHTML}</div>
       <div class="alert a-ok"><span class="ai">✓</span><div>
-        <strong>Envío registrado — ${c.org} — Período ${c.per}</strong><br>
+        <strong>Descarga registrada — ${c.org} — Período ${c.per}</strong><br>
         ${ahora.toLocaleString('es-AR')} · CSV${pdfBlob?' y DDJJ PDF':''} descargado(s).
       </div></div>
       <div class="btn-row">
-        <button class="btn-sm btn-primary" onclick="nuevoEnvio()">Nuevo envío</button>
+        <button class="btn-sm btn-primary" onclick="nuevoEnvio()">Nueva descarga</button>
       </div>`;
   }
   mostrarAvisoEnviar();
@@ -2269,14 +2269,13 @@ function nuevoEnvio(){
 function renderHist(){
   const mis=envios.filter(e=>e.organismo===currentOrg);
   const t=document.getElementById('hist-table');
-  if(!mis.length){t.innerHTML='<p style="font-size:11px;color:var(--text2)">Sin envíos aún.</p>';return;}
-  t.innerHTML=`<table><thead><tr><th>Período</th><th>Tipo</th><th>Responsable</th><th>Agentes</th><th>Crít.</th><th>Adv.</th><th>Fecha/Hora</th><th>Email</th><th>Estado</th></tr></thead><tbody>
+  if(!mis.length){t.innerHTML='<p style="font-size:11px;color:var(--text2)">Sin descargas aún.</p>';return;}
+  t.innerHTML=`<table><thead><tr><th>Período</th><th>Tipo</th><th>Responsable</th><th>Agentes</th><th>Crít.</th><th>Adv.</th><th>Fecha/Hora</th><th>Estado</th></tr></thead><tbody>
   ${mis.map(e=>`<tr><td>${e.periodo}</td><td>${e.tipo}</td><td>${e.responsable}</td>
     <td style="text-align:center">${e.agentes}</td>
     <td style="text-align:center;color:var(--red);font-weight:600">${e.criticos}</td>
     <td style="text-align:center;color:var(--amber)">${e.advertencias}</td>
     <td>${e.fecha} ${e.hora}</td>
-    <td>${e.emailOk?'<span class="pill p-ok">✓</span>':'<span class="pill p-warn">—</span>'}</td>
     <td>${estadoPill(e.estado)}</td></tr>`).join('')}</tbody></table>`;
 }
 
@@ -2287,7 +2286,7 @@ function refreshAdmin(){
   document.getElementById('m-warn').textContent=envios.filter(e=>e.estado==='advertencia').length;
   document.getElementById('m-crit').textContent=envios.filter(e=>e.estado==='critico').length;
   const ar=document.getElementById('a-recent');
-  if(!envios.length){ar.innerHTML='<p style="font-size:11px;color:var(--text2)">Sin envíos.</p>';return;}
+  if(!envios.length){ar.innerHTML='<p style="font-size:11px;color:var(--text2)">Sin descargas.</p>';return;}
   ar.innerHTML=`<table><thead><tr><th>Organismo</th><th>Período</th><th>Responsable</th><th>Agentes</th><th>Crít.</th><th>Adv.</th><th>Fecha/Hora</th><th>Estado</th></tr></thead><tbody>
   ${envios.slice(0,10).map(e=>`<tr><td>${e.organismo}</td><td>${e.periodo}</td><td>${e.responsable}</td><td style="text-align:center">${e.agentes}</td><td style="text-align:center;color:var(--red)">${e.criticos}</td><td style="text-align:center;color:var(--amber)">${e.advertencias}</td><td>${e.fecha} ${e.hora}</td><td>${estadoPill(e.estado)}</td></tr>`).join('')}</tbody></table>`;
 }
@@ -2296,16 +2295,16 @@ function renderAdminAll(){
   const f=(document.getElementById('filtro-org').value||'').toLowerCase();
   const lista=envios.filter(e=>e.organismo.toLowerCase().includes(f));
   const el=document.getElementById('a-all');
-  if(!lista.length){el.innerHTML='<p style="font-size:11px;color:var(--text2)">Sin envíos.</p>';return;}
-  el.innerHTML=`<table><thead><tr><th>Organismo</th><th>Período</th><th>Tipo</th><th>Responsable</th><th>Agentes</th><th>Crít.</th><th>Adv.</th><th>Fecha/Hora</th><th>Email</th><th>Estado</th></tr></thead><tbody>
-  ${lista.map(e=>`<tr><td>${e.organismo}</td><td>${e.periodo}</td><td>${e.tipo}</td><td>${e.responsable}</td><td style="text-align:center">${e.agentes}</td><td style="text-align:center;color:var(--red)">${e.criticos}</td><td style="text-align:center;color:var(--amber)">${e.advertencias}</td><td>${e.fecha} ${e.hora}</td><td>${e.emailOk?'✓':'—'}</td><td>${estadoPill(e.estado)}</td></tr>`).join('')}</tbody></table>`;
+  if(!lista.length){el.innerHTML='<p style="font-size:11px;color:var(--text2)">Sin descargas.</p>';return;}
+  el.innerHTML=`<table><thead><tr><th>Organismo</th><th>Período</th><th>Tipo</th><th>Responsable</th><th>Agentes</th><th>Crít.</th><th>Adv.</th><th>Fecha/Hora</th><th>Estado</th></tr></thead><tbody>
+  ${lista.map(e=>`<tr><td>${e.organismo}</td><td>${e.periodo}</td><td>${e.tipo}</td><td>${e.responsable}</td><td style="text-align:center">${e.agentes}</td><td style="text-align:center;color:var(--red)">${e.criticos}</td><td style="text-align:center;color:var(--amber)">${e.advertencias}</td><td>${e.fecha} ${e.hora}</td><td>${estadoPill(e.estado)}</td></tr>`).join('')}</tbody></table>`;
 }
 
 function renderAdminOrgs(){
   const f=(document.getElementById('filtro-admin-org')||{value:''}).value.toLowerCase();
   const lista=orgsActivos.filter(o=>o.n.toLowerCase().includes(f)||String(o.c).includes(f));
   const el=document.getElementById('a-orgs');if(!el)return;
-  el.innerHTML=`<table><thead><tr><th>Código</th><th>Organismo</th><th>Clave</th><th>Envíos</th><th>Último envío</th><th style="width:80px"></th></tr></thead>
+  el.innerHTML=`<table><thead><tr><th>Código</th><th>Organismo</th><th>Clave</th><th>Descargas</th><th>Última descarga</th><th style="width:80px"></th></tr></thead>
     <tbody>${lista.map(o=>{
       const mis=envios.filter(e=>e.organismo===o.n).length;const ult=envios.find(e=>e.organismo===o.n);
       return`<tr><td style="font-family:var(--mono)">${pad(o.c)}</td><td style="font-weight:500">${o.n}</td>
@@ -2372,11 +2371,11 @@ function actualizarSelectOrg(){
 }
 
 function exportarRegistroCSV(){
-  if(!envios.length){alert('Sin envíos para exportar.');return;}
-  const h='Organismo,Período,Tipo,Responsable,Agentes,Críticos,Advertencias,Fecha,Hora,Email,Estado';
-  const rows=envios.map(e=>`${e.organismo},${e.periodo},${e.tipo},${e.responsable},${e.agentes},${e.criticos},${e.advertencias},${e.fecha},${e.hora},${e.emailOk?'Sí':'No'},${e.estado}`);
+  if(!envios.length){alert('Sin descargas para exportar.');return;}
+  const h='Organismo,Período,Tipo,Responsable,Agentes,Críticos,Advertencias,Fecha,Hora,Estado';
+  const rows=envios.map(e=>`${e.organismo},${e.periodo},${e.tipo},${e.responsable},${e.agentes},${e.criticos},${e.advertencias},${e.fecha},${e.hora},${e.estado}`);
   const blob=new Blob([[h,...rows].join('\n')],{type:'text/csv;charset=utf-8;'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='registro_envios_csb.csv';a.click();
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='registro_descargas_csb.csv';a.click();
 }
 
 function adminTab(tab){
