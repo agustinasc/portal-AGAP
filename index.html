@@ -801,8 +801,10 @@ const ERRORES_DEF={
   61:['CRÍTICO','fechaing formato inválido'],62:['CRÍTICO','fecha_nac formato inválido'],
   63:['ADVERTENCIA','agente menor de 18 años al ingreso'],64:['ADVERTENCIA','fechaing anterior a fecha_nac'],
   65:['ADVERTENCIA','apafilos < mínimo OSEP'],66:['ADVERTENCIA','appatros < mínimo OSEP'],
-  67:['ADVERTENCIA','trasp_osep < mínimo OSEP'],68:['ADVERTENCIA','apo_vol no coincide'],
-  69:['ADVERTENCIA','tras_vol vacío con apo_vol>0'],70:['ADVERTENCIA','tras_vol no coincide'],
+  67:['ADVERTENCIA','trasp_osep < mínimo OSEP'],68:['ADVERTENCIA','apo_vol no coincide con el 2.5% ni con el 5%'],
+  69:['ADVERTENCIA','tras_vol vacío o cero con apo_vol>0'],70:['ADVERTENCIA','tras_vol no coincide con el 0.5%'],
+  79:['ADVERTENCIA','apo_vol < mínimo (base mínima × 2.5%)'],80:['ADVERTENCIA','tras_vol < mínimo OSEP'],
+  83:['ADVERTENCIA','co-seguro con importe negativo'],
   71:['ADVERTENCIA','aportejubi > tope máximo ANSES'],72:['ADVERTENCIA','d_svco vacío o cero'],
   73:['ADVERTENCIA','d_ss vacío o cero'],74:['ADVERTENCIA','trasp_osep vacío o cero']
 };
@@ -1256,7 +1258,7 @@ function recalcularTodos(){
   if(!agentes.length) return;
   confirmarAccion(
     'Recalcular aportes',
-    `Se recalcularán los aportes y contribuciones de ${agentes.length} agente(s) usando los parámetros actuales. Las remuneraciones no se modifican.`,
+    `Se recalcularán los aportes y contribuciones de ${agentes.length} agente(s) usando los parámetros actuales. No se modifican las remuneraciones, ni el aporte voluntario, ni el fondo de trasplante voluntario, ni los co-seguros.`,
     function(){
       _doRecalcular();
       renderTabla();
@@ -1292,6 +1294,9 @@ function actualizarBannerRetiro(cod){
   }
 }
 
+// NOTA: apo_vol, tras_vol y los co-seguros (coseguro, cos_pro, cos_alt, cos_int)
+// NUNCA se recalculan: se toman siempre tal como vienen del CSV o como los editó el usuario.
+// Si están por debajo del mínimo o no respetan el %, se avisa en la validación (Paso 3).
 function _doRecalcular(){
   agentes.forEach(a => {
     const remusueldo = fn(a,'remusueldo'), remusac = fn(a,'remusac'), hsextras = fn(a,'hsextras');
@@ -1315,16 +1320,12 @@ function _doRecalcular(){
     const esOSPLAD = codobra === '001102';
     let pctAporte = 0.045, pctContrib = 0.09;
     let minAporte = OSEP_APORTE_MIN, minContrib = OSEP_CONTRIB_MIN;
-    if(esOSPLAD){ if(isDoc){ pctAporte=0.03; pctContrib=0.06; } minAporte=0; minContrib=0; }
+    // OSPLAD (001102): 3% aporte y 6% contribución para todos, sin mínimos y sin fondo de trasplante.
+    if(esOSPLAD){ pctAporte=0.03; pctContrib=0.06; minAporte=0; minContrib=0; }
     const apafilos = minAporte > 0 ? Math.max(r2(baseOS*pctAporte),minAporte) : r2(baseOS*pctAporte);
     const appatros = minContrib > 0 ? Math.max(r2(baseOS*pctContrib),minContrib) : r2(baseOS*pctContrib);
-    let trasp_osep=0, apo_vol=0, tras_vol=0;
-    if(esOSEP){
-      trasp_osep = Math.max(r2(remuimpoos*0.005), OSEP_TRASP_MIN);
-      const pct  = cantAdh>=2?0.05:cantAdh>=1?0.025:0;
-      apo_vol    = cantAdh>0?Math.max(r2(remuimpoos*pct),r2(OSEP_BASE_MIN*pct)):0;
-      tras_vol   = cantAdh>0?trasp_osep:0;
-    }
+    let trasp_osep=0;
+    if(esOSEP) trasp_osep = Math.max(r2(remuimpoos*0.005), OSEP_TRASP_MIN);
     const aporte_caj = adCaja==='T'?r2(baseOS*CAJA_APORTE_PCT):0;
     const contrib_ca = adCaja==='T'?r2(baseOS*CAJA_CONTRIB_PCT):0;
     const deuda_caja = tieneDeud==='T'?r2(baseOS*CAJA_DEUDA_PCT):fn(a,'deuda_caja');
@@ -1332,7 +1333,7 @@ function _doRecalcular(){
       remuimpo:String(remuimpo),remutotal:String(remutotal),remuimpoos:String(remuimpoos),
       remuimpoto:String(remuimpo),aportejubi:String(aportejubi),aportepatr:String(aportepatr),
       apafilos:String(apafilos),appatros:String(appatros),trasp_osep:String(trasp_osep),
-      apo_vol:String(apo_vol),tras_vol:String(tras_vol),aporte_caj:String(aporte_caj),
+      aporte_caj:String(aporte_caj),
       contrib_ca:String(contrib_ca),deuda_caja:String(deuda_caja),
     });
   });
@@ -1630,7 +1631,7 @@ function htmlOS(a){
   const remutotal=fn(a,'remutotal');const remuimpoos=fn(a,'remuimpoos')||remutotal;
   const cantAdh=parseInt(fv(a,'adherente'))||0;
   let pctAporte=0.045,pctContrib=0.09,minAporte=OSEP_APORTE_MIN,minContrib=OSEP_CONTRIB_MIN,etiquetaOS='OSEP';
-  if(esOSPLAD){etiquetaOS='OSPLAD';if(isDoc){pctAporte=0.03;pctContrib=0.06;}else{pctAporte=0.045;pctContrib=0.09;}minAporte=0;minContrib=0;}
+  if(esOSPLAD){etiquetaOS='OSPLAD';pctAporte=0.03;pctContrib=0.06;minAporte=0;minContrib=0;}
   const apafilos=minAporte>0?Math.max(r2(remutotal*pctAporte),minAporte):r2(remutotal*pctAporte);
   const appatros=minContrib>0?Math.max(r2(remutotal*pctContrib),minContrib):r2(remutotal*pctContrib);
   const pct=cantAdh>=2?0.05:cantAdh>=1?0.025:0;
@@ -1640,7 +1641,7 @@ function htmlOS(a){
   <div class="field-group">
     <div class="field-group-title">Obra Social</div>
     ${dpSelect('o-codobra','Obra Social *',fv(a,'codobra'),[['009960','009960 — OSEP (Provincial)'],['001102','001102 — OSPLAD (Nacional)']])}
-    ${esOSPLAD&&isDoc?`<div class="alert a-info" style="margin-top:8px"><span class="ai">ℹ</span>Docente OSPLAD: aporte 3%, contribución 6%</div>`:''}
+    ${esOSPLAD?`<div class="alert a-info" style="margin-top:8px"><span class="ai">ℹ</span>OSPLAD: aporte 3%, contribución 6%, sin mínimos. No lleva fondo de trasplante, aportes voluntarios ni co-seguros.</div>`:''}
     <div class="g2" style="margin-top:10px">
       ${dpRO(`Aporte O.S. (${(pctAporte*100).toFixed(0)}%)`,apafilos)}
       ${dpRO(`Contribución Patr. O.S. (${(pctContrib*100).toFixed(0)}%)`,appatros)}
@@ -1648,10 +1649,10 @@ function htmlOS(a){
   </div>
   <div class="field-group" ${esOSEP?'':' style="display:none"'} id="os-vol-sec">
     <div class="field-group-title">Afiliados voluntarios OSEP</div>
-    <p style="font-size:11px;color:var(--text2);margin-bottom:8px">Adherentes: <strong>${cantAdh}</strong> · Porcentaje: <strong>${pct*100}%</strong> <span class="calc-badge">editables si difieren</span></p>
+    <p style="font-size:11px;color:var(--text2);margin-bottom:8px">Valores tomados del CSV, no se recalculan. Referencia según tramo — aporte 2.5%: <strong>${Math.max(r2(remuimpoos*0.025),r2(OSEP_BASE_MIN*0.025)).toFixed(2)}</strong> · 5%: <strong>${Math.max(r2(remuimpoos*0.05),r2(OSEP_BASE_MIN*0.05)).toFixed(2)}</strong> · fondo trasp. voluntario: <strong>${trasp_osep.toFixed(2)}</strong></p>
     <div class="g3">
-      ${dpCampo('o-apo_vol',`Aporte voluntario (${pct*100}%)`,fv(a,'apo_vol')||String(apo_vol),'number')}
-      ${dpCampo('o-tras_vol','Fondo trasplante voluntario (0.5%)',fv(a,'tras_vol')||String(tras_vol),'number')}
+      ${dpCampo('o-apo_vol','Aporte voluntario (2.5% o 5%)',fv(a,'apo_vol'),'number')}
+      ${dpCampo('o-tras_vol','Fondo trasplante voluntario (0.5%)',fv(a,'tras_vol'),'number')}
       ${dpRO('Fondo trasplante OSEP (0.5%)',trasp_osep)}
     </div>
   </div>
@@ -1829,12 +1830,10 @@ function guardarAgente(){
     const appatros=fn(a,'appatros')||0;
     a.codobra=codobra;a.apafilos=String(apafilos);a.appatros=String(appatros);
     if(codobra==='009960'){
-      const pct=cantAdh>=2?0.05:cantAdh>=1?0.025:0;
-      const apo_vol=cantAdh>0?Math.max(r2(remuimpoos*pct),r2(OSEP_BASE_MIN*pct)):0;
-      const trasp_osep=Math.max(r2(remuimpoos*0.005),OSEP_TRASP_MIN);const tras_vol=cantAdh>0?trasp_osep:0;
-      // Usar valor editado si existe, sino el calculado
-      a.apo_vol=String(gv('o-apo_vol')||apo_vol);
-      a.tras_vol=String(gv('o-tras_vol')||tras_vol);
+      const trasp_osep=Math.max(r2(remuimpoos*0.005),OSEP_TRASP_MIN);
+      // Los voluntarios se toman tal cual: del CSV o de lo que cargó el usuario. No se calculan.
+      a.apo_vol=gv('o-apo_vol');
+      a.tras_vol=gv('o-tras_vol');
       a.trasp_osep=String(trasp_osep);
       a.cos_pro=gv('o-cos_pro');a.cos_alt=gv('o-cos_alt');a.cos_int=gv('o-cos_int');
     } else {a.apo_vol='0';a.tras_vol='0';a.trasp_osep='0';a.cos_pro='0';a.cos_alt='0';a.cos_int='0';}
@@ -1920,8 +1919,33 @@ function procesarValidaciones(){
     else{if(!igual(aportejubi,Math.min(r2(remuimpo*0.11),ANSES_APORTE_MAX)))ag(53);if(dias===30&&aportejubi<ANSES_APORTE_MIN-TOL)ag(18);if(aportejubi>ANSES_APORTE_MAX+TOL)ag(71);}
     if(!igual(fn(a,'aportepatr'),r2(remuimpo*pctContribDe(fv(a,'actividad')))))ag(52);
     if(dias===30&&fn(a,'aportepatr')<ANSES_CONTRIB_MIN-TOL)ag(75);
-    if(fn(a,'apafilos')<OSEP_APORTE_MIN-TOL)ag(65);if(fn(a,'appatros')<OSEP_CONTRIB_MIN-TOL)ag(66);
+    // Los mínimos de aporte y contribución son sólo de OSEP: OSPLAD no tiene piso.
+    if(fv(a,'codobra')==='009960'){
+      if(fn(a,'apafilos')<OSEP_APORTE_MIN-TOL)ag(65);
+      if(fn(a,'appatros')<OSEP_CONTRIB_MIN-TOL)ag(66);
+    }
     if(fv(a,'codobra')==='009960'){const t=fn(a,'trasp_osep');if(t===0)ag(74);else if(t<OSEP_TRASP_MIN-TOL)ag(67);}
+    // ── Voluntarios OSEP: se toman del CSV. No se usa la cantidad de adherentes:
+    // el tramo (2.5% o 5%) se deduce del importe declarado y sólo se avisa si no cierra. ──
+    if(fv(a,'codobra')==='009960'){
+      const apoV=fn(a,'apo_vol'), trasV=fn(a,'tras_vol');
+      if(apoV>0){
+        // Importe esperado para cada tramo: % sobre la remuneración, con piso de base mínima × %
+        const esp25=Math.max(r2(remuimpoos*0.025),r2(OSEP_BASE_MIN*0.025));
+        const esp50=Math.max(r2(remuimpoos*0.05), r2(OSEP_BASE_MIN*0.05));
+        const min25=r2(OSEP_BASE_MIN*0.025);
+        if(apoV<min25-TOL)ag(79);                                  // por debajo del mínimo más bajo
+        else if(!igual(apoV,esp25)&&!igual(apoV,esp50))ag(68);      // no coincide con ningún tramo
+        const trasEsp=Math.max(r2(remuimpoos*0.005),OSEP_TRASP_MIN);
+        if(trasV===0)ag(69);
+        else if(trasV<OSEP_TRASP_MIN-TOL)ag(80);
+        else if(!igual(trasV,trasEsp))ag(70);
+      } else if(trasV>0){
+        if(trasV<OSEP_TRASP_MIN-TOL)ag(80);
+        else if(!igual(trasV,Math.max(r2(remuimpoos*0.005),OSEP_TRASP_MIN)))ag(70);
+      }
+      ['coseguro','cos_pro','cos_alt','cos_int'].forEach(cc=>{if(fn(a,cc)<0)ag(83);});
+    }
     if(!fv(a,'d_svco')||fn(a,'d_svco')===0)ag(72);else if(!igual(fn(a,'d_svco'),D_SVCO_VAL))ag(54);
     if(!fv(a,'d_ss')||fn(a,'d_ss')===0)ag(73);else if(!igual(fn(a,'d_ss'),D_SS_VAL))ag(55);
     if(fv(a,'ad_caja_co')==='T'){
