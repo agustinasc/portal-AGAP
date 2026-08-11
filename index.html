@@ -637,8 +637,8 @@ function setSyncIndicator(estado, texto){
   syncEstado = estado;
 }
 
-async function sbGuardar(organismo, agentes){
-  await fnLlamar('guardar', organismo, currentClave, { agentes });
+async function sbGuardar(organismo, agentes, periodo){
+  await fnLlamar('guardar', organismo, currentClave, { agentes, periodo });
 }
 
 async function sbCargar(organismo){
@@ -673,6 +673,21 @@ const TOPES_COLS = {
 let TOPES_FALLBACK = null;
 let topesPeriodo = null;   // período de los topes efectivamente cargados
 let topesOrigen  = 'codigo'; // 'servidor' | 'codigo'
+
+// Garantiza que TOPES corresponda al período pedido, trayéndolo de la base.
+// Devuelve {ok:true} o {ok:false, motivo:'inexistente'|'red', error}.
+async function asegurarTopes(periodo){
+  if(topesOrigen==='servidor' && topesPeriodo===periodo) return {ok:true};
+  try{
+    const fila=await sbCargarTopes(periodo);
+    if(!fila){ aplicarTopesFallback(); return {ok:false, motivo:'inexistente'}; }
+    aplicarTopes(fila, periodo);
+    return {ok:true};
+  }catch(e){
+    aplicarTopesFallback();
+    return {ok:false, motivo:'red', error:e.message};
+  }
+}
 
 // Trae los topes de un período. Devuelve el objeto o null si no existe la fila.
 async function sbCargarTopes(periodo){
@@ -709,11 +724,17 @@ async function sbGuardarTopes(periodo, topes){
 
 function guardarEnSheets(){
   if(!currentOrg || currentOrg === 'ADMIN') return;
+  // No guardar mientras los topes no vengan de la base: evita persistir
+  // importes calculados con los valores del código.
+  if(topesOrigen!=='servidor'){
+    setSyncIndicator('err','✕ Sin parámetros del período');
+    return;
+  }
   clearTimeout(syncTimeout);
   setSyncIndicator('ing', '⟳ Guardando...');
   syncTimeout = setTimeout(async ()=>{
     try{
-      await sbGuardar(currentOrg, agentes);
+      await sbGuardar(currentOrg, agentes, (document.getElementById('d-periodo').value||'').trim());
       setSyncIndicator('ok', '✓ Guardado');
     } catch(e){
       console.error('Error guardando:', e);
@@ -735,6 +756,14 @@ async function verificarBorrador(){
     const resultado = await sbCargar(currentOrg);
     if(resultado && resultado.agentes && resultado.agentes.length > 0){
       borradorAgentes = resultado.agentes;
+      // El período viene guardado con el borrador. Si la fila es vieja y no lo
+      // tiene, se cae al método anterior: el período más frecuente entre los agentes.
+      if(resultado.periodo && /^\d{6}$/.test(String(resultado.periodo).trim())){
+        borradorPeriodo = String(resultado.periodo).trim();
+        document.getElementById('borrador-count').textContent = borradorAgentes.length;
+        document.getElementById('borrador-banner').classList.remove('hidden');
+        return;
+      }
       // Detectar el período predominante en los agentes del borrador
       const periodos = borradorAgentes.map(a => (a.periodo||'').trim()).filter(Boolean);
       if(periodos.length > 0){
@@ -750,11 +779,29 @@ async function verificarBorrador(){
   } catch(e){ console.error('Error verificando borrador:', e); }
 }
 
-function cargarBorrador(){
+async function cargarBorrador(){
+  // El período del borrador manda; si no se pudo detectar, se usa el del formulario.
+  const per = borradorPeriodo || (document.getElementById('d-periodo').value||'').trim();
+  if(!/^\d{6}$/.test(per)){
+    mostrarToast('✕ No se pudo determinar el período del borrador. Completá el período y usá Continuar.');
+    return;
+  }
+
+  // Los importes se recalculan con los parámetros del período: nunca con los del código.
+  const r = await asegurarTopes(per);
+  if(!r.ok){
+    mostrarToast(r.motivo==='inexistente'
+      ? `✕ No hay parámetros de cálculo para el período ${per}. Comunicate con la CIA.`
+      : '✕ No se pudieron obtener los parámetros del servidor. Reintentá.');
+    return;
+  }
+
   agentes = [...borradorAgentes];
+  recalcularSilencioso();
+  if(!document.getElementById('d-periodo').value) document.getElementById('d-periodo').value = per;
   document.getElementById('borrador-banner').classList.add('hidden');
   setStep(2); mostrarTablaAgentes();
-  mostrarToast(`✓ ${agentes.length} agentes restaurados`);
+  mostrarToast(`✓ ${agentes.length} agentes restaurados y recalculados (período ${per})`);
 }
 
 function descartarBorrador(){
