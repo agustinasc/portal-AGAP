@@ -519,7 +519,7 @@ tr:last-child td{border-bottom:none}
       <div style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">Caja Complementaria 82 Móvil</div>
       <div class="g4" style="margin-bottom:16px">
         <div><label>Tope mín. aporte/contrib.</label><input type="number" id="pm-caja-min" step="0.01"></div>
-        <div><label>Sueldo del Gobernador</label><input type="number" id="pm-caja-gob" step="0.01"></div>
+        <div><label>Sueldo del Gobernador</label><input type="number" id="pm-caja-gob" step="0.01" oninput="actualizarTopeCaja()"></div>
         <div style="padding-top:22px;font-size:11px;color:var(--text2)" id="pm-caja-max-lbl">Tope máx: —</div>
         <div></div>
       </div>
@@ -2521,7 +2521,7 @@ function adminTab(tab){
   if(tab==='envios')renderAdminAll();
   if(tab==='organismos')renderAdminOrgs();
   if(tab==='resumen')refreshAdmin();
-  if(tab==='parametros')cargarCamposParametros();
+  if(tab==='parametros')abrirPanelParametros();
 }
 
 function pmMsg(tipo, texto){
@@ -2546,7 +2546,9 @@ async function cargarTopesPeriodo(){
   try{
     const fila=await sbCargarTopes(per);
     if(!fila){
-      pmMsg('info',`El período ${per} todavía no tiene parámetros. Podés cargar los valores y guardarlos para crearlo.`);
+      aplicarTopesFallback();
+      cargarCamposParametros();
+      pmMsg('info',`El período ${per} todavía no tiene parámetros. Los valores en pantalla son los del código, no del servidor: revisalos antes de guardar.`);
       return;
     }
     aplicarTopes(fila, per);
@@ -2555,6 +2557,25 @@ async function cargarTopesPeriodo(){
   }catch(e){
     pmMsg('err','No se pudo consultar el servidor: '+e.message);
   }
+}
+
+// Al abrir la pestaña Parámetros: se consulta SIEMPRE el servidor, para no
+// mostrar (ni guardar por error) los valores del código.
+async function abrirPanelParametros(){
+  const inp=document.getElementById('pm-periodo');
+  if(inp && !inp.value) inp.value = periodoActualSugerido();
+  cargarCamposParametros();          // pintar algo mientras responde el servidor
+  await cargarTopesPeriodo();        // y reemplazar por lo que hay en la base
+}
+
+// El tope máximo de la Caja es el 3% del sueldo del gobernador: se muestra
+// calculado en vivo mientras se edita el campo, no se ingresa a mano.
+function actualizarTopeCaja(){
+  const inp=document.getElementById('pm-caja-gob');
+  const lbl=document.getElementById('pm-caja-max-lbl');
+  if(!inp||!lbl)return;
+  const gob=parseFloat(inp.value)||0;
+  lbl.textContent='Tope máx: '+(gob>0?'$'+fmt(r2(gob*0.03)):'—');
 }
 
 function cargarCamposParametros(){
@@ -2572,9 +2593,7 @@ function cargarCamposParametros(){
   document.getElementById('pm-osep-base-min').value     = TOPES.OSEP_BASE_MIN;
   document.getElementById('pm-caja-min').value          = TOPES.CAJA_APORTE_MIN;
   document.getElementById('pm-caja-gob').value          = TOPES.CAJA_SUELDO_GOB;
-  const cajaTope = TOPES.CAJA_SUELDO_GOB > 0 ? fmt(TOPES.CAJA_SUELDO_GOB * 0.03) : '—';
-  const lblCaja = document.getElementById('pm-caja-max-lbl');
-  if(lblCaja) lblCaja.textContent = 'Tope máx: $' + cajaTope;
+  actualizarTopeCaja();
   document.getElementById('pm-svco').value              = TOPES.D_SVCO_VAL;
   document.getElementById('pm-ss').value                = TOPES.D_SS_VAL;
 }
@@ -2599,6 +2618,11 @@ async function guardarParametros(){
 
   const per=(document.getElementById('pm-periodo').value||'').trim();
   if(per.length!==6){ pmMsg('err','Indicá el período (AAAAMM) al que corresponden estos valores.'); return; }
+
+  // Si se va a sobreescribir un período existente, pedir confirmación
+  if(topesOrigen==='servidor' && topesPeriodo===per){
+    if(!confirm(`Vas a sobreescribir los parámetros del período ${per}. ¿Confirmás?`)) { pmMsg(null); return; }
+  }
 
   pmMsg('info','Guardando en el servidor...');
   try{
