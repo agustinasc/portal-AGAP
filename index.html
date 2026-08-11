@@ -668,8 +668,9 @@ const TOPES_COLS = {
   D_SVCO_VAL:'d_svco_val',             D_SS_VAL:'d_ss_val'
 };
 
-// Valores del código, como respaldo si el servidor no responde
-const TOPES_FALLBACK = {...TOPES};
+// Valores del código, como respaldo si el servidor no responde.
+// Se completa en sincronizarTopes(), porque TOPES se declara más abajo.
+let TOPES_FALLBACK = null;
 let topesPeriodo = null;   // período de los topes efectivamente cargados
 let topesOrigen  = 'codigo'; // 'servidor' | 'codigo'
 
@@ -696,7 +697,7 @@ function aplicarTopes(fila, periodo){
 
 // Vuelve a los valores del código
 function aplicarTopesFallback(){
-  Object.assign(TOPES, TOPES_FALLBACK);
+  if(TOPES_FALLBACK) Object.assign(TOPES, TOPES_FALLBACK);
   sincronizarTopes();
   topesPeriodo = null;
   topesOrigen  = 'codigo';
@@ -916,6 +917,8 @@ function sincronizarTopes(){
   D_SS_VAL             = TOPES.D_SS_VAL;
 }
 sincronizarTopes();
+// Respaldo de los valores del código, una sola vez al iniciar
+if(TOPES_FALLBACK===null) TOPES_FALLBACK={...TOPES};
 const ACT_PERM=["1106","2106","1206","2206","1306","2306","1406","2406","9999","1506","2506","0106","0206","0306","0406","01"];
 // ── Insalubridad: actividades con contribución patronal adicional del 2% ──
 const ACT_INSALUBRE=["1506"];
