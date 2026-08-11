@@ -309,7 +309,7 @@ tr:last-child td{border-bottom:none}
       </div>
     </div>
     <div id="paso1-err" class="alert a-err hidden" style="margin-top:10px"><span class="ai">✕</span><span id="paso1-err-msg"></span></div>
-    <button class="btn-primary btn-full" onclick="irPaso2()">Continuar →</button>
+    <button class="btn-primary btn-full" id="btn-paso1" onclick="irPaso2()">Continuar →</button>
   </div>
 
   <!-- PASO 2 -->
@@ -480,11 +480,20 @@ tr:last-child td{border-bottom:none}
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div>
           <div class="ct" style="margin:0">Parámetros de cálculo</div>
-          <div style="font-size:11px;color:var(--text2)">Actualizá topes, bases y alícuotas sin modificar el código. Los cambios se aplican inmediatamente en la sesión actual.</div>
+          <div style="font-size:11px;color:var(--text2)">Se guardan por período en el servidor. Los organismos los reciben al ingresar el período en el Paso 1.</div>
         </div>
-        <button class="btn-sm btn-primary" onclick="guardarParametros()">✓ Guardar cambios</button>
+        <div style="display:flex;align-items:flex-end;gap:8px">
+          <div>
+            <label style="font-size:10px;color:var(--text2)">Período</label>
+            <input type="text" id="pm-periodo" maxlength="6" placeholder="202507" style="width:90px">
+          </div>
+          <button class="btn-sm" onclick="cargarTopesPeriodo()">↻ Cargar</button>
+          <button class="btn-sm btn-primary" onclick="guardarParametros()">✓ Guardar en servidor</button>
+        </div>
       </div>
-      <div id="param-ok" class="alert a-ok hidden" style="margin-bottom:10px"><span class="ai">✓</span>Parámetros actualizados correctamente.</div>
+      <div id="param-ok" class="alert a-ok hidden" style="margin-bottom:10px"><span class="ai">✓</span><span id="param-ok-msg">Parámetros actualizados correctamente.</span></div>
+      <div id="param-err" class="alert a-err hidden" style="margin-bottom:10px"><span class="ai">✕</span><span id="param-err-msg"></span></div>
+      <div id="param-info" class="alert a-info hidden" style="margin-bottom:10px"><span class="ai">ℹ</span><span id="param-info-msg"></span></div>
 
       <div style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">ANSES — Seguridad Social</div>
       <div class="g4" style="margin-bottom:12px">
@@ -639,6 +648,62 @@ async function sbCargar(organismo){
 
 async function sbLimpiar(organismo){
   await fnLlamar('limpiar', organismo, currentClave);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// TOPES POR PERÍODO — tabla public.topes en Supabase
+// Lectura: directa por PostgREST (policy topes_lectura para anon).
+// Escritura: por Edge Function, que valida la clave de admin.
+// ══════════════════════════════════════════════════════════════════════
+const REST_URL = 'https://pllltatkepnzxcqnfbfl.supabase.co/rest/v1';
+
+// Mapeo clave de TOPES ↔ columna de la tabla
+const TOPES_COLS = {
+  ANSES_APORTE_MIN:'anses_aporte_min', ANSES_APORTE_MAX:'anses_aporte_max',
+  ANSES_BASE_MAX:'anses_base_max',     ANSES_CONTRIB_MIN:'anses_contrib_min',
+  PCT_APORTE_TRAB:'pct_aporte_trab',   PCT_CONTRIB_PATRONAL:'pct_contrib_patronal',
+  OSEP_APORTE_MIN:'osep_aporte_min',   OSEP_CONTRIB_MIN:'osep_contrib_min',
+  OSEP_TRASP_MIN:'osep_trasp_min',     OSEP_BASE_MIN:'osep_base_min',
+  CAJA_APORTE_MIN:'caja_aporte_min',   CAJA_SUELDO_GOB:'caja_sueldo_gob',
+  D_SVCO_VAL:'d_svco_val',             D_SS_VAL:'d_ss_val'
+};
+
+// Valores del código, como respaldo si el servidor no responde
+const TOPES_FALLBACK = {...TOPES};
+let topesPeriodo = null;   // período de los topes efectivamente cargados
+let topesOrigen  = 'codigo'; // 'servidor' | 'codigo'
+
+// Trae los topes de un período. Devuelve el objeto o null si no existe la fila.
+async function sbCargarTopes(periodo){
+  const resp = await fetch(`${REST_URL}/topes?periodo=eq.${encodeURIComponent(periodo)}&select=*`, {
+    headers: { 'Authorization':'Bearer '+SUPABASE_ANON, 'apikey':SUPABASE_ANON }
+  });
+  if(!resp.ok) throw new Error('Error '+resp.status);
+  const filas = await resp.json();
+  return (filas && filas.length) ? filas[0] : null;
+}
+
+// Aplica una fila de la tabla al objeto TOPES en memoria
+function aplicarTopes(fila, periodo){
+  Object.keys(TOPES_COLS).forEach(k=>{
+    const v = parseFloat(fila[TOPES_COLS[k]]);
+    if(!isNaN(v)) TOPES[k] = v;
+  });
+  sincronizarTopes();
+  topesPeriodo = periodo;
+  topesOrigen  = 'servidor';
+}
+
+// Vuelve a los valores del código
+function aplicarTopesFallback(){
+  Object.assign(TOPES, TOPES_FALLBACK);
+  sincronizarTopes();
+  topesPeriodo = null;
+  topesOrigen  = 'codigo';
+}
+
+async function sbGuardarTopes(periodo, topes){
+  await fnLlamar('guardarTopes', 'ADMIN', currentClave, { periodo, topes });
 }
 
 function guardarEnSheets(){
@@ -1019,7 +1084,7 @@ function setStep(n){
 }
 
 function irPaso1(){setStep(1);}
-function irPaso2(){
+async function irPaso2(){
   const campos=[
     ['d-direccion','Dirección'],['d-cargo-auto','Cargo Autoridad'],['d-nombre-auto','Nombre Autoridad'],
     ['d-cargo-rh','Cargo R.H.'],['d-nombre-rh','Nombre R.H.'],['d-periodo','Período']
@@ -1039,6 +1104,38 @@ function irPaso2(){
   }
   document.getElementById('paso1-err').classList.add('hidden');
 
+  // ── Topes del período ──────────────────────────────────────────────
+  // Se cargan ANTES de cualquier cálculo. Si el período no está definido
+  // en la tabla, se corta: calcular con topes de otro mes es un arrastre.
+  const btnP1 = document.getElementById('btn-paso1');
+  if(btnP1){ btnP1.disabled = true; btnP1.textContent = 'Cargando parámetros...'; }
+  try{
+    const fila = await sbCargarTopes(per);
+    if(!fila){
+      aplicarTopesFallback();
+      document.getElementById('paso1-err').classList.remove('hidden');
+      document.getElementById('paso1-err-msg').textContent =
+        `No hay parámetros de cálculo definidos para el período ${per}. Comunicate con la CIA antes de continuar.`;
+      return;
+    }
+    aplicarTopes(fila, per);
+    mostrarToast(`✓ Parámetros del período ${per} cargados`);
+  }catch(e){
+    aplicarTopesFallback();
+    document.getElementById('paso1-err').classList.remove('hidden');
+    document.getElementById('paso1-err-msg').textContent =
+      'No se pudieron obtener los parámetros de cálculo del servidor. Verificá tu conexión y volvé a intentar.';
+    return;
+  }finally{
+    if(btnP1){ btnP1.disabled = false; btnP1.textContent = 'Continuar →'; }
+  }
+
+  // ── Precarga desde el mes anterior ─────────────────────────────────
+  // Se COPIAN: remusueldo, conceptono, canasta_fl, los voluntarios y co-seguros
+  // de OSEP, y todos los datos identificatorios del agente.
+  // Se BLANQUEAN los conceptos que no se repiten mes a mes (SAC, horas extras,
+  // premios, vacaciones y los adicionales de magistrado).
+  // Los importes por porcentaje, mínimos y topes los recalcula recalcularSilencioso().
   // ── Detección de período distinto al del borrador ──────────────────
   // Solo aplica si hay borrador guardado, con período detectado, y distinto al ingresado
   if(borradorAgentes.length > 0 && borradorPeriodo && borradorPeriodo !== per && agentes.length === 0){
@@ -1046,12 +1143,13 @@ function irPaso2(){
       per,
       // Sí → copiar agentes actualizando el período
       function(){
-        agentes = borradorAgentes.map(a => ({ ...a, periodo: per }));
+        agentes = borradorAgentes.map(a => precargarDesdeMesAnterior(a, per));
+        recalcularSilencioso();          // topes y % del período actual
         borradorAgentes = agentes; // sincronizar para que "Continuar borrador" también use el nuevo período
         borradorPeriodo = per;
         document.getElementById('borrador-banner').classList.add('hidden');
         guardarEnSheets();
-        mostrarToast(`✓ ${agentes.length} agentes copiados al período ${per}`);
+        mostrarToast(`✓ ${agentes.length} agentes precargados al período ${per}`);
         setStep(2); mostrarTablaAgentes();
       },
       // No → descartar borrador y continuar sin agentes
@@ -1249,6 +1347,16 @@ function mostrarTablaAgentes(){
 }
 
 // ── RECALCULAR TODOS LOS AGENTES ──────────────────────────────────────
+// Campos que NO se arrastran de un mes al otro: se blanquean en la precarga.
+const CAMPOS_NO_ARRASTRAR=['remusac','hsextras','cant_hsext','premios','vacaciones',
+  'remu_doc','ap_dcto788','aporte_dif'];
+
+function precargarDesdeMesAnterior(a, per){
+  const n={...a, periodo: per};
+  CAMPOS_NO_ARRASTRAR.forEach(c=>{ n[c]='0'; });
+  return n;
+}
+
 function recalcularSilencioso(){
   if(!agentes.length) return;
   _doRecalcular();
@@ -2413,7 +2521,42 @@ function adminTab(tab){
   if(tab==='parametros')cargarCamposParametros();
 }
 
+function pmMsg(tipo, texto){
+  ['ok','err','info'].forEach(t=>document.getElementById('param-'+t).classList.add('hidden'));
+  if(!tipo) return;
+  document.getElementById('param-'+tipo+'-msg').textContent = texto;
+  document.getElementById('param-'+tipo).classList.remove('hidden');
+}
+
+// Período por defecto del panel: el de los topes cargados, o el mes en curso
+function periodoActualSugerido(){
+  if(topesPeriodo) return topesPeriodo;
+  const d=new Date();
+  return String(d.getFullYear())+String(d.getMonth()+1).padStart(2,'0');
+}
+
+// Trae del servidor los topes del período escrito en el panel
+async function cargarTopesPeriodo(){
+  const per=(document.getElementById('pm-periodo').value||'').trim();
+  if(per.length!==6){ pmMsg('err','El período debe tener formato AAAAMM (ej: 202507)'); return; }
+  pmMsg('info','Consultando el servidor...');
+  try{
+    const fila=await sbCargarTopes(per);
+    if(!fila){
+      pmMsg('info',`El período ${per} todavía no tiene parámetros. Podés cargar los valores y guardarlos para crearlo.`);
+      return;
+    }
+    aplicarTopes(fila, per);
+    cargarCamposParametros();
+    pmMsg('ok',`Parámetros del período ${per} cargados desde el servidor.`);
+  }catch(e){
+    pmMsg('err','No se pudo consultar el servidor: '+e.message);
+  }
+}
+
 function cargarCamposParametros(){
+  const inpPer=document.getElementById('pm-periodo');
+  if(inpPer && !inpPer.value) inpPer.value = periodoActualSugerido();
   document.getElementById('pm-anses-base-max').value    = TOPES.ANSES_BASE_MAX;
   document.getElementById('pm-anses-aporte-min').value  = TOPES.ANSES_APORTE_MIN;
   document.getElementById('pm-anses-aporte-max').value  = TOPES.ANSES_APORTE_MAX;
@@ -2433,7 +2576,7 @@ function cargarCamposParametros(){
   document.getElementById('pm-ss').value                = TOPES.D_SS_VAL;
 }
 
-function guardarParametros(){
+async function guardarParametros(){
   const gn = id => parseFloat(document.getElementById(id).value)||0;
   TOPES.ANSES_APORTE_MIN      = gn('pm-anses-aporte-min');
   TOPES.ANSES_BASE_MAX        = gn('pm-anses-base-max');
@@ -2450,10 +2593,19 @@ function guardarParametros(){
   TOPES.D_SVCO_VAL            = gn('pm-svco');
   TOPES.D_SS_VAL              = gn('pm-ss');
   sincronizarTopes(); // actualizar alias globales
-  const ok = document.getElementById('param-ok');
-  ok.classList.remove('hidden');
-  setTimeout(()=>ok.classList.add('hidden'), 3000);
-  mostrarToast('✓ Parámetros actualizados');
+
+  const per=(document.getElementById('pm-periodo').value||'').trim();
+  if(per.length!==6){ pmMsg('err','Indicá el período (AAAAMM) al que corresponden estos valores.'); return; }
+
+  pmMsg('info','Guardando en el servidor...');
+  try{
+    await sbGuardarTopes(per, TOPES);
+    topesPeriodo=per; topesOrigen='servidor';
+    pmMsg('ok',`Parámetros del período ${per} guardados. Los organismos los van a usar al declarar ese período.`);
+    mostrarToast('✓ Parámetros guardados');
+  }catch(e){
+    pmMsg('err','No se pudieron guardar en el servidor: '+e.message+'. Los valores quedaron aplicados solo en esta sesión.');
+  }
 }
 
 init();
