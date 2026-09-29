@@ -726,7 +726,8 @@ function guardarEnSheets(){
   if(!currentOrg || currentOrg === 'ADMIN') return;
   // No guardar mientras los topes no vengan de la base: evita persistir
   // importes calculados con los valores del código.
-  if(topesOrigen!=='servidor'){
+  // Excepción: Completa no usa parámetros, así que guarda igual.
+  if(topesOrigen!=='servidor' && !esSinControles()){
     setSyncIndicator('err','✕ Sin parámetros del período');
     return;
   }
@@ -788,12 +789,15 @@ async function cargarBorrador(){
   }
 
   // Los importes se recalculan con los parámetros del período: nunca con los del código.
-  const r = await asegurarTopes(per);
-  if(!r.ok){
-    mostrarToast(r.motivo==='inexistente'
-      ? `✕ No hay parámetros de cálculo para el período ${per}. Comunicate con la CIA.`
-      : '✕ No se pudieron obtener los parámetros del servidor. Reintentá.');
-    return;
+  // Completa no usa parámetros: se restaura tal cual.
+  if(!esSinControles()){
+    const r = await asegurarTopes(per);
+    if(!r.ok){
+      mostrarToast(r.motivo==='inexistente'
+        ? `✕ No hay parámetros de cálculo para el período ${per}. Comunicate con la CIA.`
+        : '✕ No se pudieron obtener los parámetros del servidor. Reintentá.');
+      return;
+    }
   }
 
   agentes = [...borradorAgentes];
@@ -801,7 +805,9 @@ async function cargarBorrador(){
   if(!document.getElementById('d-periodo').value) document.getElementById('d-periodo').value = per;
   document.getElementById('borrador-banner').classList.add('hidden');
   setStep(2); mostrarTablaAgentes();
-  mostrarToast(`✓ ${agentes.length} agentes restaurados y recalculados (período ${per})`);
+  mostrarToast(esSinControles()
+    ? `✓ ${agentes.length} agentes restaurados (período ${per})`
+    : `✓ ${agentes.length} agentes restaurados y recalculados (período ${per})`);
 }
 
 function descartarBorrador(){
@@ -875,6 +881,19 @@ const ORGS=[
   {c:2,n:"Saujil"},{c:39,n:"Senadores"},{c:89,n:"TAPSO"},{c:27,n:"Tinogasta"},
   {c:3,n:"Tribunal de cuentas"},{c:1,n:"Valle Viejo"},{c:41,n:"Villa Vil"}
 ];
+
+// ── ORGANISMO SIN CONTROLES DE CÁLCULO ─────────────────────────────────
+// Completa rectifica períodos viejos (1997 en adelante): no se cargan los
+// parámetros del período, no se recalcula ningún importe y vale lo que se cargue.
+// Se identifica por NOMBRE porque FONAVI comparte el código 6.
+const ORG_SIN_CONTROLES='Completa';
+function esSinControles(){return currentOrg===ORG_SIN_CONTROLES;}
+// Validaciones de importes, porcentajes, mínimos y máximos que se omiten para Completa.
+// Las de formato y datos (CUIL, fechas, comas, período, etc.) siguen activas.
+const COD_CALCULO=new Set([18,19,24,25,26,30,36,41,45,46,47,50,51,52,53,54,55,
+  65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80]);
+// Año mínimo aceptado en el período
+const ANIO_MIN_SIN_CONTROLES=1990;
 
 const COLS=['cuil','codobra','canthijo','conyuge','adherente','rebpromo','zonageo','actividad','porcreduc',
   'remutotal','remuimpo','porceadi','aportvolun','exessocial','asigfliar','exeosocial','remuimpoos',
@@ -1161,27 +1180,30 @@ async function irPaso2(){
   // ── Topes del período ──────────────────────────────────────────────
   // Se cargan ANTES de cualquier cálculo. Si el período no está definido
   // en la tabla, se corta: calcular con topes de otro mes es un arrastre.
-  const btnP1 = document.getElementById('btn-paso1');
-  if(btnP1){ btnP1.disabled = true; btnP1.textContent = 'Cargando parámetros...'; }
-  try{
-    const fila = await sbCargarTopes(per);
-    if(!fila){
+  // Completa no usa parámetros: se saltea todo este bloque.
+  if(!esSinControles()){
+    const btnP1 = document.getElementById('btn-paso1');
+    if(btnP1){ btnP1.disabled = true; btnP1.textContent = 'Cargando parámetros...'; }
+    try{
+      const fila = await sbCargarTopes(per);
+      if(!fila){
+        aplicarTopesFallback();
+        document.getElementById('paso1-err').classList.remove('hidden');
+        document.getElementById('paso1-err-msg').textContent =
+          `No hay parámetros de cálculo definidos para el período ${per}. Comunicate con la CIA antes de continuar.`;
+        return;
+      }
+      aplicarTopes(fila, per);
+      mostrarToast(`✓ Parámetros del período ${per} cargados`);
+    }catch(e){
       aplicarTopesFallback();
       document.getElementById('paso1-err').classList.remove('hidden');
       document.getElementById('paso1-err-msg').textContent =
-        `No hay parámetros de cálculo definidos para el período ${per}. Comunicate con la CIA antes de continuar.`;
+        'No se pudieron obtener los parámetros de cálculo del servidor. Verificá tu conexión y volvé a intentar.';
       return;
+    }finally{
+      if(btnP1){ btnP1.disabled = false; btnP1.textContent = 'Continuar →'; }
     }
-    aplicarTopes(fila, per);
-    mostrarToast(`✓ Parámetros del período ${per} cargados`);
-  }catch(e){
-    aplicarTopesFallback();
-    document.getElementById('paso1-err').classList.remove('hidden');
-    document.getElementById('paso1-err-msg').textContent =
-      'No se pudieron obtener los parámetros de cálculo del servidor. Verificá tu conexión y volvé a intentar.';
-    return;
-  }finally{
-    if(btnP1){ btnP1.disabled = false; btnP1.textContent = 'Continuar →'; }
   }
 
   // ── Precarga desde el mes anterior ─────────────────────────────────
@@ -1310,10 +1332,11 @@ function normalizarFecha(f){
   if(m)return`${m[3]}${m[2].padStart(2,'0')}${m[1].padStart(2,'0')}`;return f;
 }
 function normalizarPeriodo(p){
+  // Acepta años desde 1990 (Completa rectifica períodos viejos)
   p=String(p||'').trim().replace(/"/g,'');if(p.length!==6||!/^\d{6}$/.test(p))return p;
   const primeros4=parseInt(p.slice(0,4));const ultimos4=parseInt(p.slice(2,6));
-  if(primeros4>=2000&&primeros4<=2099)return p;
-  if(ultimos4>=2000&&ultimos4<=2099)return p.slice(2)+p.slice(0,2);return p;
+  if(primeros4>=1990&&primeros4<=2099)return p;
+  if(ultimos4>=1990&&ultimos4<=2099)return p.slice(2)+p.slice(0,2);return p;
 }
 
 function importarCSV(text,nombre){
@@ -1389,7 +1412,8 @@ function importarCSV(text,nombre){
   // repiten mes a mes (SAC, horas extras, premios, vacaciones y adicionales),
   // igual que en la precarga desde el borrador. El resto se conserva y los
   // importes por porcentaje los recalcula recalcularSilencioso() más abajo.
-  const esPrecargaCSV = !!(_periodoCSV && periodoFormulario && _periodoCSV !== periodoFormulario);
+  // Completa: no se blanquea nada, vale lo que trae el CSV.
+  const esPrecargaCSV = !esSinControles() && !!(_periodoCSV && periodoFormulario && _periodoCSV !== periodoFormulario);
   if(esPrecargaCSV){
     nuevos.forEach(r=>{ CAMPOS_NO_ARRASTRAR.forEach(c=>{ r[c]='0'; }); });
   }
@@ -1435,12 +1459,14 @@ const CAMPOS_NO_ARRASTRAR=['remusac','hsextras','cant_hsext','premios','vacacion
 
 function precargarDesdeMesAnterior(a, per){
   const n={...a, periodo: per};
-  CAMPOS_NO_ARRASTRAR.forEach(c=>{ n[c]='0'; });
+  // Completa: no se blanquea nada, vale lo que estaba cargado
+  if(!esSinControles()) CAMPOS_NO_ARRASTRAR.forEach(c=>{ n[c]='0'; });
   return n;
 }
 
 function recalcularSilencioso(){
-  if(!agentes.length) return;
+  // Completa: nunca se recalcula, vale el importe cargado
+  if(!agentes.length || esSinControles()) return;
   _doRecalcular();
 }
 
@@ -1502,10 +1528,18 @@ function _doRecalcular(){
     const adCaja  = fv(a,'ad_caja_co');
     const tieneDeud = fv(a,'tiene_deud');
     const codobra = fv(a,'codobra');
-    const aportejubi = isDoc
+    // ANSES: se aplica el mínimo del mes solo con 30 días trabajados,
+    // igual criterio que la validación (códigos 18 y 75).
+    const dias = parseInt(fv(a,'dias_traba')) || 30;
+    let aportejubi = isDoc
       ? r2(remuimpo * 0.18)
       : Math.min(r2(remuimpo * TOPES.PCT_APORTE_TRAB), ANSES_APORTE_MAX);
-    const aportepatr = r2(remuimpo * pctContribDe(fv(a,'actividad')));
+    if(dias === 30 && !isDoc) aportejubi = Math.min(Math.max(aportejubi, ANSES_APORTE_MIN), ANSES_APORTE_MAX);
+    let aportepatr = r2(remuimpo * pctContribDe(fv(a,'actividad')));
+    if(dias === 30) aportepatr = Math.max(aportepatr, ANSES_CONTRIB_MIN);
+    // Si el usuario los editó a mano en el panel, su valor manda.
+    if(fv(a,'_jubiManual') === 'T') aportejubi = fn(a,'aportejubi');
+    if(fv(a,'_patrManual') === 'T') aportepatr = fn(a,'aportepatr');
     const esOSEP   = codobra === '009960';
     const esOSPLAD = codobra === '001102';
     let pctAporte = 0.045, pctContrib = 0.09;
@@ -1516,8 +1550,8 @@ function _doRecalcular(){
     const appatros = minContrib > 0 ? Math.max(r2(baseOS*pctContrib),minContrib) : r2(baseOS*pctContrib);
     let trasp_osep=0;
     if(esOSEP) trasp_osep = Math.max(r2(remuimpoos*0.005), OSEP_TRASP_MIN);
-    const aporte_caj = adCaja==='T'?r2(baseOS*CAJA_APORTE_PCT):0;
-    const contrib_ca = adCaja==='T'?r2(baseOS*CAJA_CONTRIB_PCT):0;
+    const aporte_caj = adCaja==='T'?Math.max(r2(baseOS*CAJA_APORTE_PCT),CAJA_APORTE_MIN):0;
+    const contrib_ca = adCaja==='T'?Math.max(r2(baseOS*CAJA_CONTRIB_PCT),CAJA_APORTE_MIN):0;
     const deuda_caja = tieneDeud==='T'?r2(baseOS*CAJA_DEUDA_PCT):fn(a,'deuda_caja');
     Object.assign(a,{
       remuimpo:String(remuimpo),remutotal:String(remutotal),remuimpoos:String(remuimpoos),
@@ -1670,12 +1704,16 @@ function htmlPersonales(a){
 }
 
 function htmlLaborales(a){
+  // Completa: actividad como texto libre, para no pisar códigos viejos que no están en la lista
+  const campoActividad=esSinControles()
+    ? dpCampo('l-actividad','Actividad * (texto libre)',fv(a,'actividad'))
+    : dpSelect('l-actividad','Actividad *',fv(a,'actividad'),ACT_PERM.map(c=>[c,c]),'onchange="recalcSS()"');
   return`
   <div class="field-group">
     <div class="field-group-title">Datos laborales</div>
     <div class="g3">
       ${dpSelect('l-zonageo','Zona Geográfica',fv(a,'zonageo'),[['08','08'],['09','09']])}
-      ${dpSelect('l-actividad','Actividad *',fv(a,'actividad'),ACT_PERM.map(c=>[c,c]),'onchange="recalcSS()"')}
+      ${campoActividad}
       ${dpCampo('l-porcreduc','Porc. Reducción',fv(a,'porcreduc'),'number')}
     </div>
     <div class="g2">${dpCampo('l-saf','SAF',fv(a,'saf'))}${dpCampo('l-ubicacion','Ubicación Presupuestaria* (obligatorio)',fv(a,'ubicacion'))}</div>
@@ -1700,7 +1738,28 @@ function htmlLaborales(a){
   </div>`;
 }
 
+// ── Aporte jubilatorio y contribución patronal: automáticos pero editables ──
+// Mientras ssManual.X sea false, recalcSS() reescribe el campo al tocar las
+// remuneraciones. Si el usuario escribe encima, se congela hasta que pulse ↺.
+let ssManual={jubi:false,patr:false};
+function marcarSSManual(campo){
+  ssManual[campo]=true;
+  const b=document.getElementById(campo==='jubi'?'badge-jubi':'badge-patr');
+  if(b){b.textContent='manual';b.style.background='#C2410C';b.style.color='#fff';}
+  const r=document.getElementById(campo==='jubi'?'reset-jubi':'reset-patr');
+  if(r) r.style.display='inline';
+}
+function resetSSManual(campo){
+  ssManual[campo]=false;
+  const b=document.getElementById(campo==='jubi'?'badge-jubi':'badge-patr');
+  if(b){b.textContent='auto';b.style.background='';b.style.color='';}
+  const r=document.getElementById(campo==='jubi'?'reset-jubi':'reset-patr');
+  if(r) r.style.display='none';
+  recalcSS();
+}
+
 function recalcSS(){
+  if(esSinControles()) return; // Completa: no se autocompleta nada
   const gn=id=>{const el=document.getElementById(id);return el?parseFloat(el.value)||0:0;};
   const gv=id=>{const el=document.getElementById(id);return el?el.value:'';};
   const remusueldo=gn('s-remusueldo'),remusac=gn('s-remusac'),hsextras=gn('s-hsextras');
@@ -1720,20 +1779,101 @@ function recalcSS(){
   const contrib_ca=adCaja==='T'?r2(baseOS*CAJA_CONTRIB_PCT):0;
   const deudaCalc=tieneDeud==='T'?r2(baseOS*CAJA_DEUDA_PCT):0;
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=fmt(v);};
-  set('calc-remuimpo',remuimpo);set('calc-remutotal',remutotal);set('calc-aportejubi',aportejubi);
-  set('calc-aportepatr',aportepatr);set('calc-contrib-basica',contribBasica);set('calc-contrib-insal',contribInsal);
+  const setInp=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
+  set('calc-remuimpo',remuimpo);set('calc-remutotal',remutotal);
+  if(!ssManual.jubi) setInp('s-aportejubi',aportejubi);
+  if(!ssManual.patr) setInp('s-aportepatr',aportepatr);
+  set('calc-contrib-basica',contribBasica);set('calc-contrib-insal',contribInsal);
   set('calc-aporte_caj',aporte_caj);set('calc-contrib_ca',contrib_ca);set('calc-deuda',deudaCalc);
-  const lbl=document.getElementById('calc-jub-lbl');if(lbl)lbl.textContent=`Aporte Jubilación (${isDoc?'18%':'11%'})`;
+  // Las etiquetas contienen el badge auto/manual y el link ↺ — se reconstruyen enteras
+  const sufijo=c=>` <span class="calc-badge" id="badge-${c}"${ssManual[c]?' style="background:#C2410C;color:#fff"':''}>${ssManual[c]?'manual':'auto'}</span>`
+    +`<a href="javascript:void(0)" id="reset-${c}" onclick="resetSSManual('${c}')" style="${ssManual[c]?'':'display:none;'}font-size:10px;margin-left:4px">↺ recalcular</a>`;
+  const lbl=document.getElementById('calc-jub-lbl');
+  if(lbl)lbl.innerHTML=`Aporte Jubilación (${isDoc?'18%':'11%'})`+sufijo('jubi');
   // Insalubridad: mostrar u ocultar el desglose según la actividad elegida
   const bloqueIns=document.getElementById('bloque-insal');
   if(bloqueIns) bloqueIns.style.display=insal?'grid':'none';
   const lblPatr=document.getElementById('calc-patr-lbl');
   if(lblPatr) lblPatr.innerHTML='Contribución Patr. '+(insal
     ?'<span class="calc-badge" style="background:#B91C1C;color:#fff">insalubre 12.753%</span>'
-    :'(10.753%)');
+    :'(10.753%)')+sufijo('patr');
+}
+
+// ── Seguridad Social para Completa: todo editable, sin cálculos ──
+function htmlSSLibre(a){
+  const isDoc=fv(a,'act_doc')==='01';
+  const sacnr=parseFloat(fv(a,'_sacnr'))||0;
+  const cnrPuro=r2(fn(a,'conceptono')-sacnr);
+  const adCaja=fv(a,'ad_caja_co');const tieneDeud=fv(a,'tiene_deud');
+  return`
+  <div class="alert a-info" style="margin-bottom:12px"><span class="ai">ℹ</span><div>
+    <strong>Carga libre:</strong> este organismo no usa parámetros del período. Ningún importe se calcula: se guarda exactamente lo que cargues.
+  </div></div>
+  <div class="field-group">
+    <div class="field-group-title">Remuneraciones base</div>
+    <div class="g3">
+      ${dpCampo('s-remusueldo','Rem. Sueldo *',fv(a,'remusueldo'),'number')}
+      ${dpCampo('s-remusac','SAC Remunerativo *',fv(a,'remusac'),'number')}
+      ${dpCampo('s-sacnr','SAC No Remunerativo',fv(a,'_sacnr')||'0','number')}
+      ${dpCampo('s-hsextras','Horas Extras $',fv(a,'hsextras'),'number')}
+    </div>
+    <div class="g3">
+      ${dpCampo('s-premios','Premios *',fv(a,'premios'),'number')}
+      ${dpCampo('s-vacaciones','Vacaciones *',fv(a,'vacaciones'),'number')}
+      ${dpCampo('s-canasta_fl','Canasta Familiar *',fv(a,'canasta_fl'),'number')}
+    </div>
+    ${dpCampo('s-conceptono','Conceptos No Remunerativos (CNR) *',String(cnrPuro>=0?cnrPuro:0),'number')}
+  </div>
+  <div class="field-group">
+    <div class="field-group-title">Remuneraciones imponibles</div>
+    <div class="g3">
+      ${dpCampo('s-remuimpo','Rem. Imponible',fv(a,'remuimpo'),'number','step="0.01"')}
+      ${dpCampo('s-remutotal','Rem. Total',fv(a,'remutotal'),'number','step="0.01"')}
+      ${dpCampo('s-remuimpoos','Rem. Imponible O.S.',fv(a,'remuimpoos'),'number','step="0.01"')}
+    </div>
+  </div>
+  <div class="field-group">
+    <div class="field-group-title">ARCA — Seguridad Social</div>
+    <div class="g2">
+      ${dpCampo('s-aportejubi','Aporte Jubilación',fv(a,'aportejubi'),'number','step="0.01"')}
+      ${dpCampo('s-aportepatr','Contribución Patronal',fv(a,'aportepatr'),'number','step="0.01"')}
+      ${isDoc?dpCampo('s-ap_dcto788','Aporte Dcto. 788',fv(a,'ap_dcto788'),'number'):''}
+      ${isDoc?dpCampo('s-aporte_dif','Aporte Diferencial Doc.',fv(a,'aporte_dif'),'number'):''}
+    </div>
+  </div>
+  <div class="field-group">
+    <div class="field-group-title">Caja Complementaria 82 Móvil</div>
+    <div class="g2">
+      <select id="s-ad_caja_co" style="width:100%">
+        <option value="F"${adCaja==='F'?' selected':''}>No adherido</option>
+        <option value="T"${adCaja==='T'?' selected':''}>Adherido</option>
+      </select>
+      <select id="s-tiene_deud" style="width:100%">
+        <option value="F"${tieneDeud==='F'?' selected':''}>Sin deuda</option>
+        <option value="T"${tieneDeud==='T'?' selected':''}>Con deuda</option>
+      </select>
+    </div>
+    <div class="g3" style="margin-top:8px">
+      ${dpCampo('s-aporte_caj','Aporte Caja',fv(a,'aporte_caj'),'number','step="0.01"')}
+      ${dpCampo('s-contrib_ca','Contribución Caja',fv(a,'contrib_ca'),'number','step="0.01"')}
+      ${dpCampo('s-deuda_caja','Deuda Caja',fv(a,'deuda_caja'),'number','step="0.01"')}
+    </div>
+  </div>
+  <div class="field-group">
+    <div class="field-group-title">Seguros</div>
+    <div class="g4">
+      ${dpCampo('s-d_svco','Seg. Obligatorio',fv(a,'d_svco'),'number')}
+      ${dpCampo('s-d_ss','Seg. Sepelio',fv(a,'d_ss'),'number')}
+      ${dpCampo('s-d_svca','Seg. Adicional',fv(a,'d_svca'),'number')}
+      ${dpCampo('s-d_sc','Seg. Cónyuge',fv(a,'d_sc'),'number')}
+    </div>
+  </div>`;
 }
 
 function htmlSS(a){
+  if(esSinControles()) return htmlSSLibre(a);
+  // Si el usuario editó estos importes a mano, se muestran los suyos; si no, el calculado.
+  ssManual={jubi:fv(a,'_jubiManual')==='T',patr:fv(a,'_patrManual')==='T'};
   const isDoc=fv(a,'act_doc')==='01';
   const remusueldo=fn(a,'remusueldo'),remusac=fn(a,'remusac'),hsextras=fn(a,'hsextras');
   const sacnr=parseFloat(fv(a,'_sacnr'))||0; // SAC NR — campo visual interno
@@ -1743,11 +1883,13 @@ function htmlSS(a){
   const cnrPuro=r2(conceptonoBruto-sacnr);  // CNR puro (sin SAC NR)
   const remuimpo=r2(remusueldo+remusac+hsextras);
   const remutotal=r2(remuimpo+conceptonoBruto+premios+vacaciones+canasta);
-  const aportejubi=isDoc?r2(remuimpo*0.18):Math.min(r2(remuimpo*0.11),ANSES_APORTE_MAX);
+  const aportejubiCalc=isDoc?r2(remuimpo*0.18):Math.min(r2(remuimpo*0.11),ANSES_APORTE_MAX);
+  const aportejubi=ssManual.jubi?fn(a,'aportejubi'):aportejubiCalc;
   const insal=esInsalubreAct(fv(a,'actividad'));
   const contribBasica=r2(remuimpo*PCT_CONTRIB_PATRONAL);
   const contribInsal=insal?r2(remuimpo*PCT_INSALUBRE):0;
-  const aportepatr=r2(contribBasica+contribInsal);const adCaja=fv(a,'ad_caja_co');const tieneDeud=fv(a,'tiene_deud');
+  const aportepatr=ssManual.patr?fn(a,'aportepatr'):r2(contribBasica+contribInsal);
+  const adCaja=fv(a,'ad_caja_co');const tieneDeud=fv(a,'tiene_deud');
   const aporte_caj=adCaja==='T'?r2(remutotal*CAJA_APORTE_PCT):0;
   const contrib_ca=adCaja==='T'?r2(remutotal*CAJA_CONTRIB_PCT):0;const deudaCalc=tieneDeud==='T'?r2(remutotal*CAJA_DEUDA_PCT):0;
   const oninput='oninput="recalcSS()"';const onchange='onchange="recalcSS()"';
@@ -1777,8 +1919,16 @@ function htmlSS(a){
     <div class="g2">
       <div><label>Rem. Imponible</label><div class="ro-val" id="calc-remuimpo">${fmt(remuimpo)}</div></div>
       <div><label>Rem. Total</label><div class="ro-val" id="calc-remutotal">${fmt(remutotal)}</div></div>
-      <div><label id="calc-jub-lbl">Aporte Jubilación (${isDoc?'18%':'11%'})</label><div class="ro-val" id="calc-aportejubi">${fmt(aportejubi)}</div></div>
-      <div><label id="calc-patr-lbl">Contribución Patr. ${insal?'<span class="calc-badge" style="background:#B91C1C;color:#fff">insalubre 12.753%</span>':'(10.753%)'}</label><div class="ro-val" id="calc-aportepatr">${fmt(aportepatr)}</div></div>
+      <div>
+        <label id="calc-jub-lbl">Aporte Jubilación (${isDoc?'18%':'11%'}) <span class="calc-badge" id="badge-jubi">auto</span>
+          <a href="javascript:void(0)" id="reset-jubi" onclick="resetSSManual('jubi')" style="display:none;font-size:10px;margin-left:4px">↺ recalcular</a></label>
+        <input type="number" step="0.01" id="s-aportejubi" value="${aportejubi}" oninput="marcarSSManual('jubi')" style="width:100%">
+      </div>
+      <div>
+        <label id="calc-patr-lbl">Contribución Patr. ${insal?'<span class="calc-badge" style="background:#B91C1C;color:#fff">insalubre 12.753%</span>':'(10.753%)'} <span class="calc-badge" id="badge-patr">auto</span>
+          <a href="javascript:void(0)" id="reset-patr" onclick="resetSSManual('patr')" style="display:none;font-size:10px;margin-left:4px">↺ recalcular</a></label>
+        <input type="number" step="0.01" id="s-aportepatr" value="${aportepatr}" oninput="marcarSSManual('patr')" style="width:100%">
+      </div>
       ${isDoc?dpCampo('s-ap_dcto788','Aporte Dcto. 788',fv(a,'ap_dcto788'),'number'):''}
       ${isDoc?dpCampo('s-aporte_dif','Aporte Diferencial Doc.',fv(a,'aporte_dif'),'number'):''}
     </div>
@@ -1821,6 +1971,7 @@ function htmlSS(a){
 }
 
 function htmlOS(a){
+  const libre=esSinControles(); // Completa: importes editables, sin cálculo
   const esOSEP=fv(a,'codobra')==='009960';const esOSPLAD=fv(a,'codobra')==='001102';
   const isDoc=fv(a,'act_doc')!=='00'&&fv(a,'act_doc')!=='';
   const remutotal=fn(a,'remutotal');const remuimpoos=fn(a,'remuimpoos')||remutotal;
@@ -1832,23 +1983,35 @@ function htmlOS(a){
   const pct=cantAdh>=2?0.05:cantAdh>=1?0.025:0;
   const apo_vol=cantAdh>0?Math.max(r2(remuimpoos*pct),r2(OSEP_BASE_MIN*pct)):0;
   const trasp_osep=Math.max(r2(remuimpoos*0.005),OSEP_TRASP_MIN);const tras_vol=cantAdh>0?trasp_osep:0;
+  const campoApafilos=libre
+    ? dpCampo('o-apafilos','Aporte O.S.',fv(a,'apafilos'),'number','step="0.01"')
+    : dpRO(`Aporte O.S. (${(pctAporte*100).toFixed(0)}%)`,apafilos);
+  const campoAppatros=libre
+    ? dpCampo('o-appatros','Contribución Patr. O.S.',fv(a,'appatros'),'number','step="0.01"')
+    : dpRO(`Contribución Patr. O.S. (${(pctContrib*100).toFixed(0)}%)`,appatros);
+  const campoTrasp=libre
+    ? dpCampo('o-trasp_osep','Fondo trasplante OSEP',fv(a,'trasp_osep'),'number','step="0.01"')
+    : dpRO('Fondo trasplante OSEP (0.5%)',trasp_osep);
+  const refVol=libre
+    ? `<p style="font-size:11px;color:var(--text2);margin-bottom:8px">Carga libre: se guarda el importe que ingreses.</p>`
+    : `<p style="font-size:11px;color:var(--text2);margin-bottom:8px">Valores tomados del CSV, no se recalculan. Referencia según tramo — aporte 2.5%: <strong>${Math.max(r2(remuimpoos*0.025),r2(OSEP_BASE_MIN*0.025)).toFixed(2)}</strong> · 5%: <strong>${Math.max(r2(remuimpoos*0.05),r2(OSEP_BASE_MIN*0.05)).toFixed(2)}</strong> · fondo trasp. voluntario: <strong>${trasp_osep.toFixed(2)}</strong></p>`;
   return`
   <div class="field-group">
     <div class="field-group-title">Obra Social</div>
     ${dpSelect('o-codobra','Obra Social *',fv(a,'codobra'),[['009960','009960 — OSEP (Provincial)'],['001102','001102 — OSPLAD (Nacional)']])}
-    ${esOSPLAD?`<div class="alert a-info" style="margin-top:8px"><span class="ai">ℹ</span>OSPLAD: aporte 3%, contribución 6%, sin mínimos. No lleva fondo de trasplante, aportes voluntarios ni co-seguros.</div>`:''}
+    ${esOSPLAD&&!libre?`<div class="alert a-info" style="margin-top:8px"><span class="ai">ℹ</span>OSPLAD: aporte 3%, contribución 6%, sin mínimos. No lleva fondo de trasplante, aportes voluntarios ni co-seguros.</div>`:''}
     <div class="g2" style="margin-top:10px">
-      ${dpRO(`Aporte O.S. (${(pctAporte*100).toFixed(0)}%)`,apafilos)}
-      ${dpRO(`Contribución Patr. O.S. (${(pctContrib*100).toFixed(0)}%)`,appatros)}
+      ${campoApafilos}
+      ${campoAppatros}
     </div>
   </div>
   <div class="field-group" ${esOSEP?'':' style="display:none"'} id="os-vol-sec">
     <div class="field-group-title">Afiliados voluntarios OSEP</div>
-    <p style="font-size:11px;color:var(--text2);margin-bottom:8px">Valores tomados del CSV, no se recalculan. Referencia según tramo — aporte 2.5%: <strong>${Math.max(r2(remuimpoos*0.025),r2(OSEP_BASE_MIN*0.025)).toFixed(2)}</strong> · 5%: <strong>${Math.max(r2(remuimpoos*0.05),r2(OSEP_BASE_MIN*0.05)).toFixed(2)}</strong> · fondo trasp. voluntario: <strong>${trasp_osep.toFixed(2)}</strong></p>
+    ${refVol}
     <div class="g3">
       ${dpCampo('o-apo_vol','Aporte voluntario (2.5% o 5%)',fv(a,'apo_vol'),'number')}
       ${dpCampo('o-tras_vol','Fondo trasplante voluntario (0.5%)',fv(a,'tras_vol'),'number')}
-      ${dpRO('Fondo trasplante OSEP (0.5%)',trasp_osep)}
+      ${campoTrasp}
     </div>
   </div>
   <div class="field-group" ${esOSEP?'':' style="display:none"'} id="os-cos-sec">
@@ -1986,7 +2149,23 @@ function guardarAgente(){
   }
 
   // ── Seguridad Social ──
-  if(document.getElementById('s-remusueldo')){
+  if(document.getElementById('s-remusueldo') && esSinControles()){
+    // Completa: se guarda exactamente lo cargado, sin ningún cálculo
+    const sacnr=gn('s-sacnr');
+    Object.assign(a,{
+      remusueldo:gv('s-remusueldo'),remusac:gv('s-remusac'),hsextras:gv('s-hsextras'),
+      premios:gv('s-premios'),vacaciones:gv('s-vacaciones'),canasta_fl:gv('s-canasta_fl'),
+      conceptono:String(r2(gn('s-conceptono')+sacnr)), // CSV: CNR + SAC NR fusionados
+      _sacnr:String(sacnr),                            // campo visual interno — NO va al CSV
+      remuimpo:gv('s-remuimpo'),remutotal:gv('s-remutotal'),
+      remuimpoos:gv('s-remuimpoos'),remuimpoto:gv('s-remuimpo'),
+      aportejubi:gv('s-aportejubi'),aportepatr:gv('s-aportepatr'),
+      ad_caja_co:gv('s-ad_caja_co'),aporte_caj:gv('s-aporte_caj'),contrib_ca:gv('s-contrib_ca'),
+      tiene_deud:gv('s-tiene_deud'),deuda_caja:gv('s-deuda_caja'),
+      d_svco:gv('s-d_svco'),d_ss:gv('s-d_ss'),d_svca:gv('s-d_svca'),d_sc:gv('s-d_sc'),
+    });
+    if(document.getElementById('s-ap_dcto788')){a.ap_dcto788=gv('s-ap_dcto788');a.aporte_dif=gv('s-aporte_dif');}
+  } else if(document.getElementById('s-remusueldo')){
     const remusueldo=gn('s-remusueldo'),remusac=gn('s-remusac'),hsextras=gn('s-hsextras');
     const sacnr=gn('s-sacnr'); // SAC No Remunerativo — se suma a conceptono en el CSV
     const premios=gn('s-premios'),vacaciones=gn('s-vacaciones'),canasta=gn('s-canasta_fl'),conceptono=gn('s-conceptono');
@@ -1999,8 +2178,14 @@ function guardarAgente(){
     const baseOS=remuimpoos;
     const aporte_caj=adCaja==='T'?r2(baseOS*CAJA_APORTE_PCT):0;
     const contrib_ca=adCaja==='T'?r2(baseOS*CAJA_CONTRIB_PCT):0;
-    const aportejubi=fn(a,'aportejubi')||0;
-    const aportepatr=fn(a,'aportepatr')||0;
+    // Se toman del panel: vienen calculados sobre la remu imponible salvo que
+    // el usuario los haya editado a mano (badge "manual").
+    const aportejubi=document.getElementById('s-aportejubi')
+      ? r2(gn('s-aportejubi'))
+      : (isDoc?r2(remuimpo*0.18):Math.min(r2(remuimpo*TOPES.PCT_APORTE_TRAB),ANSES_APORTE_MAX));
+    const aportepatr=document.getElementById('s-aportepatr')
+      ? r2(gn('s-aportepatr'))
+      : r2(remuimpo*pctContribDe(a.actividad));
     Object.assign(a,{
       remusueldo:String(remusueldo),remusac:String(remusac),hsextras:String(hsextras),
       premios:String(premios),vacaciones:String(vacaciones),canasta_fl:String(canasta),
@@ -2009,6 +2194,7 @@ function guardarAgente(){
       remuimpo:String(remuimpo),remutotal:String(remutotal),
       remuimpoos:String(remuimpoos),remuimpoto:String(remuimpo),
       aportejubi:String(aportejubi),aportepatr:String(aportepatr),
+      _jubiManual:ssManual.jubi?'T':'F', _patrManual:ssManual.patr?'T':'F', // internos, no van al CSV
       ad_caja_co:adCaja,aporte_caj:String(aporte_caj),contrib_ca:String(contrib_ca),
       tiene_deud:tieneDeud,deuda_caja:gv('s-deuda_caja'),
       d_svco:gv('s-d_svco'),d_ss:gv('s-d_ss'),d_svca:gv('s-d_svca'),d_sc:gv('s-d_sc'),
@@ -2017,7 +2203,15 @@ function guardarAgente(){
   }
 
   // ── Obra Social ──
-  if(document.getElementById('o-codobra')){
+  if(document.getElementById('o-codobra') && esSinControles()){
+    // Completa: importes tal cual se cargaron
+    const codobra=gv('o-codobra');
+    a.codobra=codobra;a.apafilos=gv('o-apafilos');a.appatros=gv('o-appatros');
+    if(codobra==='009960'){
+      a.apo_vol=gv('o-apo_vol');a.tras_vol=gv('o-tras_vol');a.trasp_osep=gv('o-trasp_osep');
+      a.cos_pro=gv('o-cos_pro');a.cos_alt=gv('o-cos_alt');a.cos_int=gv('o-cos_int');
+    } else {a.apo_vol='0';a.tras_vol='0';a.trasp_osep='0';a.cos_pro='0';a.cos_alt='0';a.cos_int='0';}
+  } else if(document.getElementById('o-codobra')){
     const codobra=gv('o-codobra');const remutotal=fn(a,'remutotal');
     const remuimpoos=fn(a,'remuimpoos')||remutotal;const cantAdh=parseInt(a.adherente)||0;
     // Conservar apafilos y appatros del CSV — no recalcular para no pisar valores liquidados
@@ -2077,12 +2271,18 @@ function procesarValidaciones(){
   const errores=[];const cuils=[],ags=[];
   const orgData=orgsActivos.find(o=>o.n===currentOrg);
   const periodoDec=document.getElementById('d-periodo').value.trim();
+  const sinControles=esSinControles();
+  const anioMin=sinControles?ANIO_MIN_SIN_CONTROLES:2000;
   // Completar período vacío con el declarado (evita error 13 por campos en blanco)
   agentes.forEach(a=>{ if(!(a.periodo||'').trim()) a.periodo = periodoDec; });
   agentes.forEach((a,idx)=>{
     const nl=idx+1;const cuil=fv(a,'cuil'),agente=fv(a,'nroagente'),apeynom=fv(a,'apeynom');
     const esMag=fv(a,'act_doc')==='01';
-    const ag=cod=>{const[sev,desc]=ERRORES_DEF[cod]||['ADVERTENCIA','Error '+cod];errores.push({l:nl,cuil,agente,apeynom,esMag,cod,sev,desc});};
+    const ag=cod=>{
+      // Completa: se omiten los controles de importes, %, mínimos y máximos
+      if(sinControles&&COD_CALCULO.has(cod))return;
+      const[sev,desc]=ERRORES_DEF[cod]||['ADVERTENCIA','Error '+cod];errores.push({l:nl,cuil,agente,apeynom,esMag,cod,sev,desc});
+    };
     if(!apeynom)ag(1);if(!fv(a,'fecha_nac'))ag(2);if(!fv(a,'saf'))ag(6);
     if(!fv(a,'ubicacion'))ag(7);if(!fv(a,'domicilio'))ag(32);if(!agente)ag(4);if(!fv(a,'fechaing'))ag(60);
     if(!valCuil(cuil))ag(5);else if(cuils.includes(cuil))ag(17);else cuils.push(cuil);
@@ -2094,7 +2294,7 @@ function procesarValidaciones(){
     const dias=parseInt(fv(a,'dias_traba'))||0;if(dias<1||dias>30)ag(38);
     const per2=fv(a,'periodo').trim();
     if(!per2||!/^\d{6}$/.test(per2)){ag(13);}
-    else{const anio=parseInt(per2.slice(0,4)),mes=parseInt(per2.slice(4,6));if(anio<2000||anio>2099||mes<1||mes>12){ag(13);}else if(per2!==periodoDec){ag(13);}}
+    else{const anio=parseInt(per2.slice(0,4)),mes=parseInt(per2.slice(4,6));if(anio<anioMin||anio>2099||mes<1||mes>12){ag(13);}else if(per2!==periodoDec){ag(13);}}
     const fi=fv(a,'fechaing'),fn2=fv(a,'fecha_nac');
     if(fi&&!fechaOk(fi))ag(61);if(fn2&&!fechaOk(fn2))ag(62);
     if(fechaOk(fi)&&fechaOk(fn2)){
@@ -2158,14 +2358,17 @@ function procesarValidaciones(){
   errores.forEach(e=>{const k=e.sev+'|'+e.cod;if(!conteoFull[k])conteoFull[k]={e,count:0,cuils:[]};conteoFull[k].count++;if(e.cuil&&!conteoFull[k].cuils.includes(e.cuil))conteoFull[k].cuils.push(e.cuil);});
   const criticos=errores.filter(e=>e.sev==='CRÍTICO');const adv=errores.filter(e=>e.sev==='ADVERTENCIA');
   let html='';
+  if(sinControles){
+    html+=`<div class="alert a-info"><span class="ai">ℹ</span><div><strong>Organismo sin controles de cálculo.</strong> Se revisaron solo formato y datos (CUIL, fechas, período, campos obligatorios, etc.). Los importes se toman tal como fueron cargados.</div></div>`;
+  }
   if(!criticos.length&&!adv.length){
-    html=`<div class="alert a-ok"><span class="ai">✓</span><div><strong>${agentes.length} registros sin errores.</strong></div></div>`;
+    html+=`<div class="alert a-ok"><span class="ai">✓</span><div><strong>${agentes.length} registros sin errores.</strong></div></div>`;
     document.getElementById('btn-continuar-ok').classList.remove('hidden');document.getElementById('btn-aceptar-warn').classList.add('hidden');
   } else if(!criticos.length){
-    html=`<div class="alert a-warn"><span class="ai">⚠</span><div><strong>${agentes.length} registros — ${adv.length} advertencia(s).</strong> No hay errores críticos.</div></div>`;
+    html+=`<div class="alert a-warn"><span class="ai">⚠</span><div><strong>${agentes.length} registros — ${adv.length} advertencia(s).</strong> No hay errores críticos.</div></div>`;
     document.getElementById('btn-aceptar-warn').classList.remove('hidden');document.getElementById('btn-continuar-ok').classList.add('hidden');
   } else {
-    html=`<div class="alert a-err"><span class="ai">✕</span><div><strong>${criticos.length} error(es) CRÍTICO(s) en ${agentes.length} registros.</strong></div></div>`;
+    html+=`<div class="alert a-err"><span class="ai">✕</span><div><strong>${criticos.length} error(es) CRÍTICO(s) en ${agentes.length} registros.</strong></div></div>`;
     if(adv.length)html+=`<div class="alert a-warn"><span class="ai">⚠</span>${adv.length} advertencia(s) adicionales.</div>`;
     document.getElementById('btn-aceptar-warn').classList.add('hidden');document.getElementById('btn-continuar-ok').classList.add('hidden');
   }
